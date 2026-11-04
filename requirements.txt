@@ -1,0 +1,4 @@
+pywebview>=5.0,<7.0
+pyinstaller>=6.0,<7.0
+numpy>=1.24,<3.0
+scipy>=1.10,<2.0

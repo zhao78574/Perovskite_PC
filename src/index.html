@@ -1,0 +1,2214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Perovskite Workstation</title>
+    <!-- 本地依赖：随安装包一起分发，启动时不再联网，断网/内网也能用 -->
+    <script src="vendor/plotly-2.27.0.min.js"></script>
+    <script src="vendor/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #0f766e;
+            --primary-hover: #0b5f59;
+            --primary-soft: #e8f5f2;
+            --bg-color: #f3f6f8;
+            --sidebar-bg: #ffffff;
+            --text-main: #17212b;
+            --text-sub: #64748b;
+            --border-color: #dfe7ec;
+            --shadow-sm: 0 2px 10px rgba(15, 35, 45, 0.05);
+            --shadow-md: 0 14px 35px rgba(15, 35, 45, 0.10);
+            --danger-color: #c2413b;
+        }
+
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Arial, sans-serif; }
+        body { margin: 0; padding: 0; display: flex; height: 100vh; background: #f5f5f7; color: var(--text-main); overflow: hidden; }
+        
+        .sidebar { width: 276px; background: rgba(246,247,249,.88); backdrop-filter: blur(32px) saturate(150%); padding: 1.25rem; overflow-y: auto; flex-shrink: 0; border-right: 1px solid #e3e5e8; z-index: 10;}
+        .brand { display:flex; align-items:center; gap:12px; padding: 2px 4px 22px; border-bottom:1px solid var(--border-color); margin-bottom:22px; }
+        .brand-mark { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; color:#fff; font-weight:750; background:linear-gradient(145deg,#0c8c86,#155e75); box-shadow:0 8px 22px rgba(15,118,110,.23); }
+        .brand-name { font-size:14px; font-weight:750; letter-spacing:.2px; }
+        .brand-version { color:var(--text-sub); font-size:11px; margin-top:2px; }
+        .sidebar h3 { font-size: 1.1rem; margin-top: 0; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .sidebar hr { border: 0; border-top: 1px solid var(--border-color); margin: 1.5rem 0; }
+        
+        .radio-group { display: flex; flex-direction: column; gap: 10px; }
+        .radio-group label { display: flex; align-items: center; padding: 12px 13px; border-radius: 10px; font-size: 14px; font-weight: 520; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+        .nav-icon { width:20px; height:20px; display:grid; place-items:center; margin-right:10px; color:#44515d; }
+        .nav-icon svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+        .radio-group label:hover { background-color: #f5f5f7; }
+        .radio-group input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+        .radio-group label:has(input:checked) { background: rgba(0,113,227,.09); border-color: rgba(0,113,227,.08); color: #0667cc; box-shadow:inset 0 0 0 .5px rgba(255,255,255,.7); }
+        .radio-group label:has(input:focus-visible) { outline:2px solid #087ef1; outline-offset:2px; }
+        .nav-group-title { margin:15px 12px 2px; color:#8a929b; font-size:11px; font-weight:700; letter-spacing:.8px; }
+
+        .control-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: block; color: #515154; }
+        input[type="number"], input[type="text"], select { width: 100%; padding: 10px 12px; border: 1px solid #d7dfe5; border-radius: 9px; margin-bottom: 16px; font-size: 14px; background: rgba(255,255,255,.86); transition: all 0.2s; }
+        input[type="number"]:focus, input[type="text"]:focus, select:focus { border-color: var(--primary-color); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15); }
+        
+        .checkbox-wrapper { display: flex; align-items: center; margin-bottom: 14px; font-size: 14px; cursor: pointer; font-weight: 500;}
+        .checkbox-wrapper input { margin-right: 10px; accent-color: var(--primary-color); width: 16px; height: 16px; cursor: pointer; }
+
+        .main { flex: 1; padding: 1.8rem clamp(1.5rem,3.2vw,3.3rem) 3rem; overflow-y: auto; background:rgba(255,255,255,.72); }
+        .topbar { display:flex; align-items:center; justify-content:space-between; gap:24px; row-gap:12px; flex-wrap:wrap; margin-bottom:1.8rem; }
+        .top-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; min-width:0; }
+        .toolbar-btn { height:38px; border:1px solid #d8dce1; background:rgba(255,255,255,.9); color:#222831; padding:0 15px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 7px rgba(0,0,0,.035); }
+        .toolbar-btn:hover { background:#fff; border-color:#c6cbd1; }
+        .toolbar-btn.primary { color:#fff; border-color:#087ef1; background:#087ef1; box-shadow:0 4px 12px rgba(0,113,227,.2); }
+        .header-title { font-size: 28px; font-weight: 700; letter-spacing: -0.7px; margin-bottom: 4px; }
+        .header-sub { font-size: 14px; color: var(--text-sub); font-weight: 400; }
+        .status-pill { display:none; }
+        .status-dot { width:7px; height:7px; border-radius:50%; background:#16a085; box-shadow:0 0 0 4px rgba(22,160,133,.12); }
+        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; margin-top: 10px; color: #1d1d1f; display: flex; align-items: center; gap: 8px;}
+
+        .upload-row { display: flex; gap: 16px; align-items: stretch; margin-bottom: 24px; }
+        .upload-zone { flex: 1; border: 1.5px dashed #aebfc7; background: rgba(255,255,255,.78); border-radius: 16px; padding: 34px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 8px 30px rgba(28,48,60,.045); position: relative; overflow: hidden; backdrop-filter:blur(12px);}
+        .upload-zone:hover { border-color: var(--primary-color); background-color: #fcfcfd; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .upload-zone.dragover { border-color: var(--primary-color); background-color: #eff5fc; }
+        .upload-icon { width: 48px; height: 48px; margin-bottom: 12px; color: var(--primary-color); opacity: 0.8; }
+        .upload-text { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 4px; }
+        .upload-hint { font-size: 12px; color: var(--text-sub); }
+        .upload-zone input[type="file"] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+        .btn { padding: 0 20px; border-radius: 10px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; height: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;}
+        .btn-clear { background-color: #f2f2f7; color: var(--danger-color); height: auto; padding: 0 24px; }
+        .btn-clear:hover { background-color: #ffe5e5; }
+        .btn-primary { background:#087ef1; color: white; padding: 12px 24px; margin-top: 10px; width: 100%; height: 43px; box-shadow:0 3px 10px rgba(0,113,227,.18);}
+        .btn-primary:hover { background:#006edc; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,113,227,.25); }
+        .tool-grid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr); gap:18px; align-items:stretch; margin-bottom:24px; }
+        .tool-card { background:rgba(255,255,255,.9); border:1px solid var(--border-color); border-radius:16px; padding:22px; box-shadow:var(--shadow-sm); }
+        .tool-card h3 { margin:0 0 7px; font-size:17px; }
+        .tool-card p { margin:0 0 18px; color:var(--text-sub); font-size:13px; line-height:1.6; }
+        .tool-actions { display:flex; gap:10px; flex-wrap:wrap; }
+        .tool-actions .btn { width:auto; height:42px; margin:0; padding:0 18px; }
+        .btn-secondary { background:#edf3f7; color:#334155; border:1px solid #d7e1e7; }
+        .btn-secondary:hover { background:#e4edf3; }
+        .convert-status { margin-top:14px; min-height:20px; color:var(--text-sub); font-size:13px; }
+        
+        .card { background: rgba(255,255,255,.9); border-radius: 18px; padding: 24px; box-shadow: 0 8px 32px rgba(28,48,60,.055); border: 1px solid rgba(215,225,231,.9); margin-bottom: 24px; backdrop-filter:blur(14px); }
+        .analysis-grid { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,.8fr); gap:16px; margin-bottom:22px; }
+        .plot-card { margin:0; min-width:0; }
+        .metric-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .metric-card { min-height:132px; background:rgba(255,255,255,.9); border:1px solid rgba(215,225,231,.9); border-radius:18px; padding:19px; box-shadow:0 8px 28px rgba(28,48,60,.045); }
+        .metric-label { color:#0d9488; font-size:14px; font-weight:650; margin-bottom:18px; }
+        .metric-card:nth-child(2n) .metric-label { color:#1677e8; }
+        .metric-value { color:#17212b; font-size:27px; line-height:1; font-weight:680; letter-spacing:-.8px; }
+        .metric-value small { font-size:12px; color:var(--text-sub); font-weight:500; letter-spacing:0; margin-left:3px; }
+        .metric-note { margin-top:17px; height:2px; border-radius:2px; background:linear-gradient(90deg,#12a59a,rgba(18,165,154,.08)); }
+        .metric-card:nth-child(2n) .metric-note { background:linear-gradient(90deg,#1682f3,rgba(22,130,243,.08)); }
+        
+        .table-container { border: 1px solid var(--border-color); border-radius: 16px; overflow: auto; max-height: 350px; box-shadow:0 7px 26px rgba(28,48,60,.04); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; background: white; text-align: left; }
+        th, td { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; }
+        th { background: rgba(248,250,251,.96); font-weight: 600; color: #515b66; position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--border-color); }
+        .sort-header { width:100%; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+        .sort-header:hover { color:var(--primary-color); }
+        .sort-arrow { min-width:12px; color:var(--primary-color); font-size:11px; }
+        tr:hover { background-color: #f5faf9; }
+        .section-kicker { color:#8a929b; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.15px; margin-bottom:5px; }
+        .empty-state { min-height:310px; }
+        .unit-field { position:relative; }
+        .unit-field::after { content:'cm²'; position:absolute; right:12px; top:11px; color:var(--text-sub); font-size:12px; pointer-events:none; }
+        .unit-field input { padding-right:48px; }
+        .action-row { display:flex; justify-content:flex-end; margin-top:12px; }
+        .fit-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:22px; }
+        .fit-summary .metric-card { min-height:112px; }
+        .fit-table { min-width:1900px; }
+        .fit-table td:nth-child(n+2) { font-variant-numeric:tabular-nums; }
+        .fit-status { color:var(--text-sub); font-size:13px; margin-top:10px; min-height:18px; }
+        .fit-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 18px; margin-bottom:16px; }
+        .fit-controls select { width:auto; min-width:210px; margin:0; }
+        .view-toggle { display:flex; padding:3px; border:1px solid var(--border-color); border-radius:10px; background:#f5f7f9; }
+        .view-toggle button { border:0; border-radius:7px; padding:8px 13px; color:var(--text-sub); background:transparent; cursor:pointer; font-weight:600; }
+        .view-toggle button.active { color:#fff; background:#087ef1; box-shadow:0 2px 7px rgba(0,113,227,.18); }
+        .progress-text { margin-left:auto; color:var(--text-sub); font-size:13px; }
+        .ups-pair-grid { display:grid; grid-template-columns:1.1fr 1fr 1fr 100px 42px; gap:10px; align-items:end; margin-bottom:10px; }
+        .ups-pair-grid select, .ups-pair-grid input { margin:0; }
+        .ups-fit-grid { display:grid; grid-template-columns:120px repeat(3,minmax(130px,1fr)); gap:10px; align-items:center; }
+        .ups-fit-grid input { margin:0; }
+        .ups-fit-grid .btn { height:40px; padding:0 12px; }
+        .ups-error { color:var(--danger-color); font-size:12px; margin-top:8px; }
+        .ups-plots { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        /* 参考图版式：样品列随可用宽度伸缩，三样品及窄屏横向滚动 */
+        .ups-figure-scroll { overflow-x:auto; overflow-y:hidden; padding:2px 0 4px; }
+        .ups-figure { width:max-content; min-width:100%; margin:0; }
+        .ups-curves { display:flex; gap:24px; }
+        .ups-sample-group { display:flex; flex:0 0 var(--ups-col-width,440px); width:var(--ups-col-width,440px); flex-direction:column; }
+        .ups-sample-heading { display:flex; align-items:center; justify-content:center; gap:9px; min-height:28px; margin-bottom:9px; color:#111; font-size:14px; font-weight:700; }
+        .ups-sample-heading-line { width:34px; height:4px; border-radius:4px; }
+        .ups-curve-pair { display:flex; gap:12px; }
+        .ups-panel { flex:0 0 calc((var(--ups-col-width,440px) - 12px)/2); width:calc((var(--ups-col-width,440px) - 12px)/2); box-sizing:border-box; min-width:0; background:#fff; border:1px solid #bcc5cc; }
+        .ups-panel .ups-plot-box { background:#fff; }
+        .ups-energy-ref { margin-top:20px; background:#fff; }
+        .ups-energy-note { margin-top:8px; font-size:12px; color:var(--t-sub); }
+        .ups-energy-mode { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 0 8px; }
+        .ups-plot-dock { padding:6px 0 8px; margin:-4px 0 4px; border-bottom:1px solid var(--t-line); }
+        .ups-plots-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+        .ups-plots-note { font-size:12px; color:var(--t-sub); }
+        .ups-plot-tools { display:inline-flex; border:1px solid var(--t-line-strong); border-radius:9px; overflow:hidden; background:var(--t-surface); }
+        .ups-size-btn { border:0; background:transparent; color:var(--t-ink-2); font-size:12px; padding:5px 11px; cursor:pointer; font-family:inherit; }
+        .ups-size-btn + .ups-size-btn { border-left:1px solid var(--t-line); }
+        .ups-size-btn.is-active { background:var(--primary-color); color:#fff; }
+        .ups-level-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; align-items:end; }
+        .ups-level-grid input { margin:0; }
+        .ups-smooth-block { margin-top:18px; padding-top:14px; border-top:1px solid #e9eef1; }
+        .ups-smooth-row { display:flex; align-items:flex-end; gap:22px; flex-wrap:wrap; }
+        .ups-smooth-row .control-label { margin:0; flex:0 1 170px; min-width:130px; }
+        .ups-smooth-row .control-label input { margin:6px 0 0; }
+        .ups-smooth-row .checkbox-wrapper { margin:0 0 11px; white-space:nowrap; }
+        .ups-level-grid .ups-error, .ups-pair-grid .ups-error { display:block; margin-top:4px; }
+        .ups-level-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+        .ups-energy-scroll { width:100%; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+        .ups-energy-scroll #ups-energy-plot { max-width:none; }
+        .box-group-list { display:grid; gap:16px; margin-bottom:16px; }
+        .box-group-card { padding:18px; background:rgba(255,255,255,.9); border:1px solid rgba(215,225,231,.9); border-radius:16px; box-shadow:var(--shadow-sm); }
+        .box-group-head { display:grid; grid-template-columns:minmax(180px,1fr) minmax(150px,auto) auto; gap:12px; align-items:end; margin-bottom:14px; }
+        .box-group-head .control-label { margin:0 0 6px; }
+        .box-group-head input { margin:0; }
+        .box-group-drop { min-height:112px; border:1.5px dashed #aebfc7; background:rgba(248,251,252,.82); border-radius:14px; display:flex; align-items:center; justify-content:center; gap:14px; padding:18px; cursor:pointer; transition:all .2s ease; color:var(--text-sub); }
+        .box-group-drop:hover, .box-group-drop.dragover { border-color:var(--primary-color); background:#f4f9ff; box-shadow:0 0 0 3px rgba(0,102,204,.08); transform:translateY(-1px); }
+        .box-group-drop svg { width:34px; height:34px; color:var(--primary-color); flex:0 0 auto; }
+        .box-group-drop strong { display:block; color:var(--text-main); margin-bottom:5px; }
+        .box-add-row { display:flex; justify-content:center; margin:4px 0 20px; }
+        .box-add-row .btn { width:auto; min-width:180px; }
+        dialog { width:min(760px,calc(100vw - 40px)); max-height:80vh; border:0; border-radius:16px; padding:0; box-shadow:0 24px 70px rgba(15,35,45,.28); }
+        dialog::backdrop { background:rgba(15,23,42,.38); backdrop-filter:blur(3px); }
+        .dialog-body { padding:24px; }
+        .dialog-actions { display:flex; justify-content:flex-end; gap:10px; padding:16px 24px; border-top:1px solid var(--border-color); background:#f8fafc; }
+        .dialog-actions .btn { width:auto; height:40px; }
+        .rename-warning { color:var(--danger-color); font-size:13px; margin:10px 0; }
+        .toast { position:fixed; right:24px; bottom:24px; max-width:420px; padding:13px 17px; border-radius:11px; background:#17313d; color:#fff; box-shadow:var(--shadow-md); z-index:1000; opacity:0; transform:translateY(12px); pointer-events:none; transition:.2s; }
+        .toast.show { opacity:1; transform:translateY(0); }
+        @media (max-width: 1080px) { .analysis-grid{grid-template-columns:1fr}.metric-grid{grid-template-columns:repeat(4,1fr)}.metric-card{min-height:110px}.metric-value{font-size:22px} }
+        @media (max-width: 900px) { .sidebar{width:250px}.main{padding:1.5rem}.topbar{margin-bottom:1.5rem}.status-pill{display:none}.metric-grid{grid-template-columns:1fr 1fr}.tool-grid,.ups-plots{grid-template-columns:1fr}.ups-pair-grid,.ups-fit-grid{grid-template-columns:1fr 1fr}.box-group-head{grid-template-columns:1fr auto}.box-group-head>div:first-child{grid-column:1/-1} }
+    </style>
+
+    <!-- 外观主题层：默认值 = 现有浅色外观，data-mode / data-accent 由设置页切换 -->
+    <style id="appearance-theme">
+        html {
+            --t-bg:#f5f5f7; --t-main:rgba(255,255,255,.72); --t-sidebar:rgba(246,247,249,.88);
+            --t-surface:#ffffff; --t-card:rgba(255,255,255,.9); --t-card-line:rgba(215,225,231,.9);
+            --t-line:#e3e5e8; --t-line-strong:#d8dce1; --t-ink:#17212b; --t-ink-2:#222831;
+            --t-sub:#64748b; --t-muted:#8a929b; --t-input:rgba(255,255,255,.86);
+            --t-table-head:rgba(248,250,251,.96); --t-row-line:#f0f0f0; --t-row-hover:#f5faf9;
+            --t-btn:rgba(255,255,255,.9); --t-btn-ink:#222831; --t-dash:#aebfc7; --t-toast:#17313d;
+            --t-grid:#edf1f3; --t-axis:#cfd9df;
+            --t-accent:#087ef1; --t-accent-hover:#006edc; --t-accent-soft:rgba(0,113,227,.09);
+            --t-accent-text:#0667cc; --t-data:#0f766e; --t-data-2:#1677e8;
+        }
+        html[data-accent="teal"]      { --t-accent:#0d9488; --t-accent-hover:#0b7f75; --t-accent-soft:rgba(13,148,136,.10); --t-accent-text:#0b6b62; --t-data:#0d9488; --t-data-2:#0f766e; }
+        html[data-accent="ocean"]     { --t-accent:#087ef1; --t-accent-hover:#006edc; --t-accent-soft:rgba(0,113,227,.09); --t-accent-text:#0667cc; --t-data:#1677e8; --t-data-2:#0f766e; }
+        html[data-accent="graphite"]  { --t-accent:#2b3440; --t-accent-hover:#1d252e; --t-accent-soft:rgba(43,52,64,.08); --t-accent-text:#2b3440; --t-data:#0e7490; --t-data-2:#0e7490; }
+        html[data-accent="indigo"]    { --t-accent:#4f46e5; --t-accent-hover:#4338ca; --t-accent-soft:rgba(79,70,229,.09); --t-accent-text:#4338ca; --t-data:#4f46e5; --t-data-2:#0f766e; }
+        html[data-accent="sand"]      { --t-accent:#a0522d; --t-accent-hover:#8a4426; --t-accent-soft:rgba(160,82,45,.10); --t-accent-text:#8a4426; --t-data:#a0522d; --t-data-2:#2f6b4f; }
+
+        html[data-mode="dark"] {
+            color-scheme: dark;
+            --border-color:#232c34; --primary-color:#2dd4bf; --primary-hover:#2dd4bf;
+            --t-bg:#0e1317; --t-main:#0e1317; --t-sidebar:#111820; --t-surface:#151c22;
+            --t-card:#151c22; --t-card-line:#232c34; --t-line:#232c34; --t-line-strong:#2f3a44;
+            --t-ink:#e8eef3; --t-ink-2:#c6d1da; --t-sub:#a7b2bc; --t-muted:#93a0ab;
+            --t-input:#1a222a; --t-table-head:#1a222a; --t-row-line:#1d252c; --t-row-hover:#1b242b;
+            --t-btn:#1a222a; --t-btn-ink:#dbe4ea; --t-dash:#2c3841; --t-toast:#1b2a33;
+            --t-grid:#1e262e; --t-axis:#33414d;
+        }
+        html[data-mode="dark"] dialog { background:#182129; border:1px solid #2a3540; }
+        html[data-mode="dark"][data-accent="teal"]     { --t-data:#2dd4bf; --t-data-2:#5eead4; --t-accent:#0f766e; --t-accent-text:#5eead4; }
+        html[data-mode="dark"][data-accent="ocean"]    { --t-data:#60a5fa; --t-data-2:#93c5fd; --t-accent:#2563eb; --t-accent-text:#93c5fd; }
+        html[data-mode="dark"][data-accent="graphite"] { --t-data:#7dd3fc; --t-data-2:#bae6fd; --t-accent:#334155; --t-accent-text:#cbd5e1; }
+        html[data-mode="dark"][data-accent="indigo"]   { --t-data:#a5b4fc; --t-data-2:#c7d2fe; --t-accent:#4f46e5; --t-accent-text:#c7d2fe; }
+        html[data-mode="dark"][data-accent="sand"]     { --t-data:#e7b58a; --t-data-2:#f3d3b3; --t-accent:#a0522d; --t-accent-text:#f3d3b3; }
+
+        body { background: var(--t-bg); color: var(--t-ink); }
+        .main { background: var(--t-main); }
+        .sidebar { background: var(--t-sidebar); border-right-color: var(--t-line); }
+        .radio-group label:hover { background-color: var(--t-row-hover); }
+        .radio-group label:has(input:checked) { background: var(--t-accent-soft); color: var(--t-accent-text); }
+        .radio-group label:has(input:focus-visible) { outline-color: var(--t-accent); }
+        .nav-icon { color: var(--t-sub); }
+        .nav-group-title, .section-kicker { color: var(--t-muted); }
+        .control-label { color: var(--t-ink-2); }
+        .brand-name, .header-title, .section-title, .metric-value, .tool-card h3 { color: var(--t-ink); }
+        .header-sub, .upload-hint, .fit-status, .convert-status, .progress-text, .tool-card p { color: var(--t-sub); }
+        .upload-text, .box-group-drop strong { color: var(--t-ink-2); }
+
+        .card, .metric-card, .tool-card, .box-group-card {
+            background: var(--t-card); border-color: var(--t-card-line);
+        }
+        .metric-label, .metric-card:nth-child(2n) .metric-label { color: var(--t-data); }
+        .metric-note, .metric-card:nth-child(2n) .metric-note {
+            background: linear-gradient(90deg, var(--t-data), transparent);
+        }
+        .metric-value small { color: var(--t-sub); }
+
+        .toolbar-btn { background: var(--t-btn); color: var(--t-btn-ink); border-color: var(--t-line-strong); }
+        .toolbar-btn:hover { background: var(--t-surface); border-color: var(--t-line); }
+        .toolbar-btn.primary, .btn-primary { background: var(--t-accent); border-color: var(--t-accent); color: #fff; }
+        .toolbar-btn.primary:hover, .btn-primary:hover { background: var(--t-accent-hover); border-color: var(--t-accent-hover); }
+        .btn-secondary { background: var(--t-input); color: var(--t-ink-2); border-color: var(--t-line-strong); }
+        .btn-secondary:hover { background: var(--t-row-hover); }
+        .btn-clear { background: var(--t-input); }
+        .view-toggle { background: var(--t-input); border-color: var(--t-line); }
+        .view-toggle button { color: var(--t-sub); }
+        .view-toggle button.active { background: var(--t-accent); color: #fff; }
+        .sort-arrow, .sort-header:hover { color: var(--t-accent-text); }
+
+        .upload-zone, .box-group-drop { border-color: var(--t-dash); background: var(--t-card); }
+        .upload-zone:hover, .box-group-drop:hover, .upload-zone.dragover, .box-group-drop.dragover {
+            border-color: var(--t-accent); background: var(--t-surface);
+        }
+        .upload-icon, .box-group-drop svg { color: var(--t-data); }
+        .box-group-drop { color: var(--t-sub); }
+
+        input[type="number"], input[type="text"], select, .cell-field {
+            background: var(--t-input); border-color: var(--t-line-strong); color: var(--t-ink);
+        }
+        input[type="number"]:focus, input[type="text"]:focus, select:focus {
+            background: var(--t-surface); border-color: var(--t-accent);
+            box-shadow: 0 0 0 3px var(--t-accent-soft);
+        }
+        .unit-field::after { color: var(--t-sub); }
+
+        table { background: var(--t-surface); }
+        th { background: var(--t-table-head); color: var(--t-sub); border-bottom-color: var(--t-line); }
+        td { border-bottom-color: var(--t-row-line); color: var(--t-ink-2); }
+        tr:hover { background-color: var(--t-row-hover); }
+        .table-container { border-color: var(--t-line); }
+
+        dialog { background: var(--t-surface); color: var(--t-ink); }
+        .dialog-actions { background: var(--t-table-head); border-top-color: var(--t-line); }
+        .toast { background: var(--t-toast); }
+
+        /* ---------- 设置页 ---------- */
+        .settings-section + .settings-section { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--t-line); }
+        .settings-title { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+        .settings-sub { font-size: 12.5px; color: var(--t-sub); margin: 0 0 18px; }
+        .segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--t-input); border: 1px solid var(--t-line); }
+        .segmented button {
+            border: 0; background: none; padding: 7px 14px; border-radius: 7px; cursor: pointer;
+            font: inherit; font-size: 13px; color: var(--t-sub); font-weight: 600;
+        }
+        .segmented button.active { background: var(--t-surface); color: var(--t-ink); box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+        .accent-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .accent-chip {
+            display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 8px;
+            border-radius: 10px; border: 1px solid var(--t-line-strong); background: var(--t-surface);
+            cursor: pointer; font: inherit; font-size: 12.5px; color: var(--t-ink-2);
+        }
+        .accent-chip i { width: 16px; height: 16px; border-radius: 999px; display: block; }
+        .accent-chip.active { border-color: var(--t-accent); box-shadow: 0 0 0 2px var(--t-accent-soft); font-weight: 650; }
+        .settings-hint { font-size: 12px; color: var(--t-sub); margin-top: 12px; }
+    </style>
+
+    <script>
+        (function () {
+            try {
+                var saved = JSON.parse(localStorage.getItem('perovskite-workstation-appearance-v1') || '{}');
+                var mode = saved.mode || 'light';
+                var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+                document.documentElement.dataset.accent = saved.accent || 'ocean';
+            } catch (error) { /* 忽略：按默认浅色渲染 */ }
+        })();
+    </script>
+<style id="brand-style">
+        /* ---------- 品牌标识（D 方案）与侧栏设置入口 ---------- */
+        :root { --brand-dot:#0F766E; }
+        html[data-mode="dark"] { --brand-dot:#2DD4BF; }
+        .sidebar { display:flex; flex-direction:column; padding:0; overflow:hidden; }
+        .sidebar-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:1.25rem 1.25rem 4px; }
+        .brand { color: var(--t-ink); }
+        .brand-mark { background:none; box-shadow:none; color:var(--t-ink); }
+        .brand-name { font-size:14px; font-weight:650; letter-spacing:-.15px; }
+        .brand-version { font-size:10.5px; letter-spacing:.02em; color:var(--t-muted); margin-top:3px; }
+        :root { --t-sidebar-solid:#F6F7F9; }
+        html[data-mode="dark"] { --t-sidebar-solid:#111820; }
+        .sidebar-settings {
+            flex:0 0 auto; z-index:2;
+            display:flex; align-items:center; gap:9px;
+            margin:0 10px 10px; height:40px; padding:0 12px;
+            border:0; border-radius:10px;
+            background:transparent;
+            box-shadow:0 -1px 0 var(--t-line);
+            color:var(--t-sub); font:inherit; font-size:13px; font-weight:500;
+            cursor:pointer;
+        }
+        .sidebar-settings:hover { background:var(--t-row-hover); color:var(--t-ink); }
+        .sidebar-settings svg {
+            width:17px; height:17px; fill:none; stroke:currentColor;
+            stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;
+        }
+</style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-scroll">
+        <div class="brand">
+            <div class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 40 40" width="40" height="40" focusable="false">
+                    <rect x="1.1" y="1.1" width="37.8" height="37.8" rx="11.1" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M15 28.5 V11.5 H21.6 A5.2 5.2 0 0 1 21.6 21.9 H15" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="27.8" cy="27.2" r="2.4" fill="var(--brand-dot,#0F766E)"/>
+                </svg>
+            </div>
+            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.2</span></div></div>
+        </div>
+        <h3>工作区</h3>
+        <div class="radio-group">
+            <div class="nav-group-title">器件与曲线分析</div>
+            <label><input type="radio" name="mode" value="1" checked onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 17l5-6 4 3 7-9"/><circle cx="4" cy="17" r="1.5"/><circle cx="9" cy="11" r="1.5"/><circle cx="13" cy="14" r="1.5"/><circle cx="20" cy="5" r="1.5"/></svg></span>J–V 分析</label>
+            <label><input type="radio" name="mode" value="4" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 18c4-1 4-12 8-12s4 9 10 10"/><path d="M3 21h18M3 3v18"/></svg></span>TRPL 拟合</label>
+            <label><input type="radio" name="mode" value="5" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 16c2-8 5-11 8-11s6 4 7 11"/></svg></span>EIS 绘图</label>
+            <label><input type="radio" name="mode" value="6" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 17V9h5v8h5V5h5v12"/></svg></span>MPP 绘图</label>
+            <label><input type="radio" name="mode" value="7" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M6 16c3-1 3-9 6-9s3 7 6 8"/><path d="M8 4h8"/></svg></span>UPS 分析</label>
+            <label><input type="radio" name="mode" value="8" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M6 17c3-1 4-11 7-11s4 8 7 10"/></svg></span>SCLC 分析</label>
+            <div class="nav-group-title">统计</div>
+            <label><input type="radio" name="mode" value="9" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 4v16"/><path d="M6 8h5v8H6zM7 6h3M7 18h3"/><path d="M14 7c3 1 3 9 0 10M17 9l3 3-3 3"/></svg></span>统计箱线图</label>
+            <div class="nav-group-title">数据准备</div>
+            <label><input type="radio" name="mode" value="2" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h4M10 12h6M10 16h6"/></svg></span>数据提取</label>
+            <label><input type="radio" name="mode" value="3" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 12l9-9h7v7l-9 9z"/><circle cx="16" cy="6" r="1"/></svg></span>文件重命名</label>
+        </div>
+        <hr>
+
+        <div id="cfg-mode-1">
+            <span class="control-label">J–V 计算参数</span>
+            <div class="unit-field"><input type="number" id="pce-area" value="0.07065" min="0.000001" step="0.00001" onchange="applyPCEAreaToAll()" title="统一有效面积 (cm²)"></div>
+            <label class="checkbox-wrapper">
+                <input type="checkbox" id="pce-abs" onchange="triggerPCE()"> 电流 (I) 取绝对值计算
+            </label>
+            <label class="checkbox-wrapper">
+                <input type="checkbox" id="pce-log" onchange="triggerPCE()"> 纵轴显示 log10(|Y|)
+            </label>
+        </div>
+
+        <div id="cfg-mode-2" style="display: none;">
+            <span class="control-label">基础提取规则</span>
+            <div style="display: flex; gap: 10px;">
+                <div style="flex:1"><input type="number" id="ext-skip" value="16" min="0" oninput="triggerExt()" placeholder="跳过行数"></div>
+                <div style="flex:1"><input type="text" id="ext-cols" value="1 2" oninput="triggerExt()" placeholder="提取列"></div>
+            </div>
+            
+            <hr>
+            <span class="control-label">高级处理</span>
+            <label class="checkbox-wrapper"><input type="checkbox" id="ext-do-abs" onchange="toggleOpt('ext-abs-target'); triggerExt()"> 取绝对值</label>
+            <div id="ext-abs-target" style="display:none; margin-bottom: 10px;"><input type="text" id="ext-abs-col" value="2" oninput="triggerExt()" placeholder="目标列 (如: 2)"></div>
+            
+            <label class="checkbox-wrapper"><input type="checkbox" id="ext-do-jv" onchange="toggleOpt('ext-jv-area'); triggerExt()"> 换算电流密度 (mA/cm²)</label>
+            <div id="ext-jv-area" style="display:none; margin-bottom: 10px;"><input type="number" id="ext-area" value="0.07065" step="0.00001" oninput="triggerExt()" placeholder="面积 (cm²)"></div>
+
+            <label class="checkbox-wrapper"><input type="checkbox" id="ext-do-math" onchange="toggleOpt('ext-math-box'); triggerExt()"> 第二列自定义运算</label>
+            <div id="ext-math-box" style="display:none; gap:10px; margin-bottom: 10px;">
+                <div style="flex:1"><select id="ext-op" onchange="triggerExt()"><option value="+">+</option><option value="-">-</option><option value="×">×</option><option value="÷">÷</option></select></div>
+                <div style="flex:2"><input type="text" id="ext-val" value="1.0" oninput="triggerExt()"></div>
+            </div>
+            
+            <label class="checkbox-wrapper"><input type="checkbox" id="ext-blank" onchange="triggerExt()"> 文件之间插入空白列</label>
+        </div>
+        <div id="cfg-mode-4" style="display:none;">
+            <span class="control-label">拟合模型</span>
+            <select id="fit-model" onchange="refitTRPL()"><option value="expdec2" selected>ExpDec2 双指数衰减</option><option value="expdec3">ExpDec3 三指数衰减</option></select>
+            <div class="fit-status" id="fit-progress">自动从强度峰值开始，并将峰值时刻设为 0。寿命单位与时间列一致。</div>
+        </div>
+        <div id="cfg-mode-5" style="display:none;">
+            <span class="control-label">Nyquist 图</span>
+            <div class="fit-status">横轴为 Z′，纵轴为 −Z″。阻抗差按文件首尾数据点计算。</div>
+        </div>
+        <div id="cfg-mode-6" style="display:none;">
+            <span class="control-label">纵坐标</span>
+            <select id="mpp-y-mode" onchange="renderMPP()"><option value="current">电流 (mA)</option><option value="pce" selected>PCE (%)</option></select>
+            <span class="control-label">MPP 电压 (V)</span>
+            <input type="number" id="mpp-voltage" value="0.9" min="0.000001" step="0.01" oninput="renderMPP()">
+            <span class="control-label">器件面积 (cm²)</span>
+            <input type="number" id="mpp-area" value="0.07065" min="0.000001" step="0.00001" oninput="renderMPP()">
+            <span class="control-label">光强 (mW/cm²)</span>
+            <input type="number" id="mpp-light" value="100" min="0.000001" step="1" oninput="renderMPP()">
+            <label class="checkbox-wrapper"><input type="checkbox" id="mpp-smooth" onchange="renderMPP()"> 平滑曲线（修复短时掉点）</label>
+            <div class="fit-status">第一列为时间（s），第二列为电流（A）。PCE 按电流绝对值换算。</div>
+        </div>
+        <div id="cfg-mode-7" style="display:none;">
+            <span class="control-label">UPS 光源</span>
+            <input type="text" value="He I · 21.22 eV" disabled>
+            <div class="fit-status">每个样品独立设置 Eg。自动拟合后可修改截止边和价带边区间。</div>
+        </div>
+        <div id="cfg-mode-8" style="display:none;">
+            <span class="control-label">器件面积 (cm²)</span>
+            <input type="number" id="sclc-area" value="0.07065" min="0.000001" step="0.00001" oninput="renderSCLC()">
+            <span class="control-label">分析偏压</span>
+            <select id="sclc-polarity" onchange="renderSCLC()"><option value="positive" selected>正偏压</option><option value="negative">负偏压</option></select>
+            <label class="checkbox-wrapper"><input type="checkbox" id="sclc-smooth" checked onchange="renderSCLC()"> 4 点移动平均（抑制周期干扰）</label>
+            <div class="fit-status">前两列依次为电压（V）和电流（A）；使用 |J|–|V| 双对数坐标。</div>
+        </div>
+        <div id="cfg-mode-9" style="display:none;">
+            <span class="control-label">统一器件面积 (cm²)</span>
+            <input type="number" id="box-area" value="0.07065" min="0.000001" step="0.00001" onchange="recalculateBoxGroups()">
+            <div class="fit-status">每个 TXT / BIN 文件代表一个器件。TXT 前两列依次为电压（V）和电流（A）；BIN 支持 CHI LSV 格式。</div>
+        </div>
+        </div>
+        <button type="button" class="sidebar-settings" onclick="openSettings()" title="设置：外观、主题与偏好">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.2"/>
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>
+            </svg>
+            <span>设置</span>
+        </button>
+    </div>
+
+    <div class="main">
+        <div class="topbar"><div><div class="section-kicker">Perovskite Analysis</div><div class="header-title" id="page-title">J–V 分析</div><div class="header-sub" id="page-subtitle">J–V 性能计算 · PL / TRPL 曲线观察</div></div><div class="top-actions" id="pce-toolbar"><button class="toolbar-btn" onclick="requestClear(1)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-1').click()">导入曲线</button><button class="toolbar-btn primary" onclick="exportPCE()">导出结果</button></div><div class="top-actions" id="trpl-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(4)">清空</button><button class="toolbar-btn primary" onclick="replaceTRPL()">重新导入</button></div><div class="top-actions" id="eis-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(5)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-5').click()">重新导入</button><button class="toolbar-btn primary" onclick="exportEIS()">导出数据</button></div><div class="top-actions" id="mpp-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(6)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-6').click()">重新导入</button><button class="toolbar-btn primary" onclick="exportMPP()">导出换算数据</button></div><div class="top-actions" id="ups-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(7)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-7').click()">导入文件</button><button class="toolbar-btn primary" onclick="exportUPSExcel()">导出 Excel</button></div><div class="top-actions" id="sclc-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(8)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-8').click()">重新导入</button><button class="toolbar-btn" onclick="exportSCLCPlot()">导出 PNG</button><button class="toolbar-btn primary" onclick="exportSCLC()">导出 Excel</button></div><div class="top-actions" id="box-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(9)">清空</button><button class="toolbar-btn" onclick="addBoxGroup()">添加对比组</button><button class="toolbar-btn" onclick="exportBoxPlot()">导出 PNG</button><button class="toolbar-btn primary" onclick="exportBoxData()">导出 Excel</button></div></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin:-12px 0 16px"><button class="toolbar-btn" onclick="importSettings()">导入配置</button><button class="toolbar-btn" onclick="exportSettings()">导出配置</button><button class="toolbar-btn" onclick="openMethodGuide()" aria-label="查看当前模块的方法与公式">方法说明</button></div>
+
+        <div id="ui-mode-1">
+            <div class="upload-row empty-state" id="upload-row-1">
+                <div class="upload-zone" id="drop-1">
+                    <svg class="upload-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                    <div class="upload-text">导入 J–V、PL 或 TRPL 曲线数据</div>
+                    <div class="upload-hint">支持 .txt / .bin 多文件选择或拖拽导入</div>
+                    <input type="file" id="file-1" multiple accept=".txt,.bin" onchange="processPCE(this.files)">
+                </div>
+            </div>
+            <div id="result-1" style="display:none;">
+                <div class="analysis-grid">
+                    <div class="card plot-card" style="padding: 10px;"><div id="plot-1" style="height: 430px; width: 100%;"></div></div>
+                    <div class="metric-grid">
+                        <div class="metric-card"><div class="metric-label">Voc</div><div class="metric-value" id="metric-voc">— <small>V</small></div><div class="metric-note"></div></div>
+                        <div class="metric-card"><div class="metric-label">Jsc</div><div class="metric-value" id="metric-jsc">— <small>mA/cm²</small></div><div class="metric-note"></div></div>
+                        <div class="metric-card"><div class="metric-label">FF</div><div class="metric-value" id="metric-ff">—</div><div class="metric-note"></div></div>
+                        <div class="metric-card"><div class="metric-label">PCE</div><div class="metric-value" id="metric-pce">— <small>%</small></div><div class="metric-note"></div></div>
+                    </div>
+                </div>
+                <div class="section-title">核心参数汇总</div>
+                <div class="table-container">
+                    <table id="table-1"></table>
+                </div>
+                <div class="action-row">
+                    <button class="btn btn-primary" style="width: auto; display: inline-flex;" onclick="exportPCE()">导出 CSV 表格</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="ui-mode-2" style="display: none;">
+            <div class="section-title">数据处理</div>
+            <div class="tool-grid">
+                <div class="upload-zone" id="drop-2">
+                    <svg class="upload-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                    <div class="upload-text">点击选择文件，或将文件拖拽至此处</div>
+                    <div class="upload-hint">支持 .txt 和 .bin 格式，自动生成对比矩阵</div>
+                    <input type="file" id="file-2" multiple accept=".txt,.bin" onchange="processExtract(this.files)">
+                </div>
+                <div class="tool-card">
+                    <h3>BIN 批量转 TXT</h3>
+                    <p>支持选择多个 BIN 文件，也可以选择包含多个实验子文件夹的总目录。文件夹模式会递归转换并保留原目录结构。</p>
+                    <div class="tool-actions">
+                        <button class="btn btn-secondary" onclick="document.getElementById('file-bin-txt').click()">选择 BIN 文件</button>
+                        <button class="btn btn-primary" onclick="convertBinFolders()">选择文件夹（递归）</button>
+                        <input type="file" id="file-bin-txt" multiple accept=".bin" style="display:none" onchange="convertBinToTxt(this.files)">
+                    </div>
+                    <div class="convert-status" id="bin-convert-status">转换结果将保存到你选择的输出目录；同名文件不会被覆盖。</div>
+                </div>
+            </div>
+            <div class="action-row" style="margin-bottom:16px"><button class="btn btn-clear" style="height:40px" onclick="clearUI(2)">清空提取结果</button></div>
+            <div id="result-2" style="display:none;">
+                <div class="table-container">
+                    <table id="table-2"></table>
+                </div>
+                <div class="action-row">
+                    <button class="btn btn-primary" style="width: auto; display: inline-flex;" onclick="exportExt()">导出 Excel 矩阵</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="ui-mode-3" style="display: none;">
+            <div class="section-title">批量文件重命名</div>
+            <div class="card">
+                <div class="radio-group" style="flex-direction: row; gap: 20px; margin-bottom: 20px;">
+                    <label style="padding-left: 0; background: none; border: none;"><input type="radio" name="rename_type" value="1" checked onchange="toggleRenameMode()"> 统一添加前缀</label>
+                    <label style="padding-left: 0; background: none; border: none;"><input type="radio" name="rename_type" value="2" onchange="toggleRenameMode()"> 以父文件夹名作为前缀</label>
+                </div>
+                <div id="rename-prefix-box">
+                    <span class="control-label">请输入要添加的前缀:</span>
+                    <input type="text" id="rename-prefix" value="0.2-" style="max-width: 300px;">
+                </div>
+                <div class="tool-actions">
+                    <button class="btn btn-primary" style="max-width: 300px;" onclick="previewRename()">选择文件夹并预览</button>
+                    <button class="btn btn-secondary" onclick="undoRename()">撤销上一次重命名</button>
+                </div>
+                <div class="fit-status" id="rename-status">执行前会显示完整的“旧名 → 新名”清单，并检查文件名冲突。</div>
+            </div>
+        </div>
+
+        <div id="ui-mode-4" style="display:none;">
+            <div class="upload-row empty-state" id="upload-row-4">
+                <div class="upload-zone" id="drop-4">
+                    <svg class="upload-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M4 19h16v2H4zM4 3h2v14H4zM7 15c3-1 3-9 6-9 2 0 3 6 7 7v2c-5-1-5-7-7-7-2 0-2 8-6 9z"/></svg>
+                    <div class="upload-text">导入一个或多个 TRPL 数据文件</div>
+                    <div class="upload-hint">支持 CSV / TXT / XLSX，前两列为时间与强度</div>
+                    <input type="file" id="file-4" multiple accept=".csv,.txt,.xlsx,.xls" onchange="processTRPL(this.files)">
+                </div>
+            </div>
+            <div id="result-4" style="display:none;">
+                <div class="card fit-controls">
+                    <div class="view-toggle"><button id="fit-view-all" class="active" onclick="setTRPLView('all')">全部叠加</button><button id="fit-view-one" onclick="setTRPLView('one')">单文件查看</button></div>
+                    <select id="fit-sample" onchange="selectTRPLSample(this.value)"></select>
+                    <div class="progress-text" id="fit-result-count"></div>
+                </div>
+                <div class="card plot-card" style="padding:10px; margin-bottom:22px;"><div id="plot-4" style="height:440px;width:100%;"></div></div>
+                <div class="fit-summary">
+                    <div class="metric-card"><div class="metric-label">积分平均寿命 τavg</div><div class="metric-value" id="fit-tau">—</div><div class="metric-note"></div></div>
+                    <div class="metric-card"><div class="metric-label">R²</div><div class="metric-value" id="fit-r2">—</div><div class="metric-note"></div></div>
+                    <div class="metric-card"><div class="metric-label">快组分占比</div><div class="metric-value" id="fit-fast">—</div><div class="metric-note"></div></div>
+                    <div class="metric-card" id="fit-middle-card" style="display:none;"><div class="metric-label">中组分占比</div><div class="metric-value" id="fit-middle">—</div><div class="metric-note"></div></div>
+                    <div class="metric-card"><div class="metric-label">慢组分占比</div><div class="metric-value" id="fit-slow">—</div><div class="metric-note"></div></div>
+                </div>
+                <div class="section-title">全部文件拟合汇总</div>
+                <div class="table-container"><table id="table-4" class="fit-table"></table></div>
+                <div class="action-row"><button class="btn btn-primary" style="width:auto;display:inline-flex;" onclick="exportTRPL()">导出全部结果 Excel</button></div>
+            </div>
+        </div>
+
+        <div id="ui-mode-5" style="display:none;">
+            <div class="upload-row empty-state" id="upload-row-5">
+                <div class="upload-zone" id="drop-5">
+                    <svg class="upload-icon" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 16c2-8 5-11 8-11s6 4 7 11"/></svg>
+                    <div class="upload-text">导入一个或多个 EIS 文件</div>
+                    <div class="upload-hint">支持 TXT / CSV，前三列依次为频率、Z′ 和 Z″</div>
+                    <input type="file" id="file-5" multiple accept=".txt,.csv" onchange="processEIS(this.files)">
+                </div>
+            </div>
+            <div id="result-5" style="display:none;">
+                <div class="card plot-card" style="padding:10px;margin-bottom:22px;"><div id="plot-5" style="height:500px;width:100%;"></div></div>
+                <div class="section-title">阻抗汇总</div>
+                <div class="table-container" style="margin-bottom:22px;"><table id="eis-summary-table"></table></div>
+                <div class="section-title">原始数据</div>
+                <div class="table-container"><table id="eis-data-table"></table></div>
+                <div class="action-row" style="gap:10px"><button class="btn btn-secondary" style="height:42px" onclick="exportPlot('plot-5','EIS_Nyquist','svg',1200,720)">导出 SVG</button><button class="btn btn-primary" style="width:auto;display:inline-flex;" onclick="exportEIS()">导出全部 EIS 数据</button></div>
+            </div>
+        </div>
+
+        <div id="ui-mode-6" style="display:none;">
+            <div class="upload-row empty-state" id="upload-row-6">
+                <div class="upload-zone" id="drop-6">
+                    <svg class="upload-icon" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 17V9h5v8h5V5h5v12"/></svg>
+                    <div class="upload-text">导入一个或多个 MPP 文件</div>
+                    <div class="upload-hint">支持 TXT / CSV，第一列为时间，第二列为电流</div>
+                    <input type="file" id="file-6" multiple accept=".txt,.csv" onchange="processMPP(this.files)">
+                </div>
+            </div>
+            <div id="result-6" style="display:none;">
+                <div class="card plot-card" style="padding:10px;margin-bottom:22px;"><div id="plot-6" style="height:500px;width:100%;"></div></div>
+                <div class="section-title">MPP 数据</div>
+                <div class="fit-status" id="mpp-data-status"></div>
+                <div class="table-container"><table id="mpp-data-table"></table></div>
+                <div class="action-row"><button class="btn btn-secondary" style="height:42px" onclick="exportPlot('plot-6','MPP_Tracking','svg',1200,720)">导出 SVG</button></div>
+            </div>
+        </div>
+
+        <div id="ui-mode-7" style="display:none;">
+            <div class="upload-row" id="upload-row-7">
+                <div class="upload-zone" id="drop-7">
+                    <svg class="upload-icon" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M6 16c3-1 3-9 6-9s3 7 6 8"/></svg>
+                    <div class="upload-text">导入多个 UPS Excel 文件</div>
+                    <div class="upload-hint">支持 .xls / .xlsx；导入后手动配对每个样品的 0 V 与 −5 V 文件</div>
+                    <input type="file" id="file-7" multiple accept=".xls,.xlsx" onchange="loadUPSFiles(this.files)">
+                </div>
+            </div>
+            <div id="result-7" style="display:none;">
+                <div class="card">
+                    <div class="section-title" style="margin-top:0">样品配对</div>
+                    <div id="ups-pairs"></div>
+                    <div class="action-row" style="justify-content:space-between"><button class="btn btn-secondary" onclick="addUPSSample()">添加样品</button><button class="btn btn-primary" style="width:auto;margin:0" onclick="processUPSSamples()">自动拟合全部样品</button></div>
+                    <div class="fit-status" id="ups-status"></div>
+                    <div class="ups-smooth-block">
+                        <div class="ups-level-head"><strong>曲线平滑</strong><span class="fit-status" style="margin:0">对齐 Origin：Savitzky-Golay</span></div>
+                        <div class="ups-smooth-row">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="ups-smooth" checked onchange="applyUPSSmoothing()"> 启用平滑</label>
+                            <label class="control-label">多项式阶数<input type="number" id="ups-smooth-order" min="0" max="4" step="1" value="2"></label>
+                            <label class="control-label">窗口点数<input type="number" id="ups-smooth-window" min="3" max="51" step="2" value="7"></label>
+                        </div>
+                        <div class="fit-status" style="margin-top:8px">平滑在归一化与拟合之前完成，曲线与切线用的是同一份数据；关闭后回落到原始数据。</div>
+                        <span class="ups-error" id="ups-smooth-error"></span>
+                    </div>
+                </div>
+                <div id="ups-analysis" style="display:none;">
+                    <div class="ups-plot-dock">
+                        <div class="ups-plots-head">
+                            <span class="ups-plots-note">曲线随下方数值实时更新 · 三种图高</span>
+                            <div class="ups-plot-tools">
+                                <button type="button" class="ups-size-btn" data-h="260" onclick="setUPSPlotHeight(260,this)">紧凑</button>
+                                <button type="button" class="ups-size-btn is-active" data-h="300" onclick="setUPSPlotHeight(300,this)">标准</button>
+                                <button type="button" class="ups-size-btn" data-h="360" onclick="setUPSPlotHeight(360,this)">大图</button>
+                            </div>
+                        </div>
+                        <div class="ups-figure-scroll" id="ups-figure-scroll">
+                            <div class="ups-figure" id="ups-figure">
+                                <div class="ups-curves" id="ups-curves"></div>
+                                <div class="ups-energy-ref" id="ups-energy-ref-wrap" style="display:none">
+                                    <div id="ups-energy-ref"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ups-energy-note" id="ups-energy-ref-note" style="display:none">所有样品共用线性能量刻度，真空能级固定为 0 eV。</div>
+                    </div>
+                    <div class="ups-energy-mode">
+                        <span class="ups-plots-note">能级图样式</span>
+                        <div class="ups-plot-tools">
+                            <button type="button" class="ups-size-btn is-active" data-energy-mode="reference" onclick="setUPSEEnergyMode('reference',this)">参考图</button>
+                            <button type="button" class="ups-size-btn" data-energy-mode="pcbm" onclick="setUPSEEnergyMode('pcbm',this)">PCBM 对比</button>
+                        </div>
+                    </div>
+                    <div class="card plot-card" id="ups-energy-pcbm-wrap" style="padding:8px;display:none"><div class="ups-energy-scroll"><div id="ups-energy-plot" style="height:560px"></div></div></div>
+                    <div class="card" id="ups-pcbm-controls" style="margin-top:16px;display:none">
+                        <div class="ups-level-head"><strong>PCBM 参考能级</strong><span class="fit-status">全部样品共用</span></div>
+                        <div class="ups-level-grid">
+                            <label class="control-label">LUMO (eV)<input type="number" id="ups-pcbm-lumo" step="0.01" value="-3.90" onchange="updateUPSPCBM('lumo',this.value)"></label>
+                            <label class="control-label">HOMO (eV)<input type="number" id="ups-pcbm-homo" step="0.01" value="-5.63" onchange="updateUPSPCBM('homo',this.value)"></label>
+                        </div>
+                        <span class="ups-error" id="ups-pcbm-error" data-ups-error="pcbm"></span>
+                    </div>
+                    <div class="section-title">UPS 计算公式与交点调整</div>
+                    <div id="ups-fit-controls"></div>
+                    <div class="section-title">UPS 能级汇总<span class="fit-status" style="margin-left:10px;font-weight:400">原始拟合结果，未应用曲线平移</span></div>
+                    <div class="table-container"><table id="ups-summary-table"></table></div>
+                    <div class="action-row" style="gap:10px"><button class="btn btn-secondary" style="height:42px" onclick="exportUPSPlot('curves','svg')">导出曲线 SVG</button><button class="btn btn-secondary" style="height:42px" onclick="exportUPSPlot('energy','png')">导出能级 PNG</button><button class="btn btn-secondary" style="height:42px" onclick="exportUPSPlot('energy','svg')">导出能级 SVG</button><button class="btn btn-primary" style="width:auto;margin:0" onclick="exportUPSExcel()">导出全部结果 Excel</button></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ui-mode-8" style="display:none;">
+            <div class="upload-row empty-state" id="upload-row-8">
+                <div class="upload-zone" id="drop-8">
+                    <svg class="upload-icon" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M6 17c3-1 4-11 7-11s4 8 7 10"/></svg>
+                    <div class="upload-text">导入一个或多个 SCLC 文件</div>
+                    <div class="upload-hint">支持 TXT / CSV，前两列依次为电压（V）和电流（A）</div>
+                    <input type="file" id="file-8" multiple accept=".txt,.csv" onchange="processSCLC(this.files)">
+                </div>
+            </div>
+            <div id="result-8" style="display:none;">
+                <div class="card plot-card" style="padding:10px;margin-bottom:22px;"><div id="plot-8" style="height:500px;width:100%;"></div></div>
+                <div class="section-title">SCLC 数据</div>
+                <div class="fit-status" id="sclc-data-status"></div>
+                <div class="table-container"><table id="sclc-data-table"></table></div>
+                <div class="action-row"><button class="btn btn-secondary" style="height:42px" onclick="exportSCLCPlot('svg')">导出 SVG</button></div>
+            </div>
+        </div>
+        <div id="ui-mode-9" style="display:none;">
+            <div class="section-title">实验组</div>
+            <div id="box-group-list" class="box-group-list"></div>
+            <div class="box-add-row"><button class="btn btn-primary" type="button" onclick="addBoxGroup()">＋ 添加对比组</button></div>
+            <div id="box-empty" class="fit-status">请为第一组填写名称并导入多个 J–V TXT / BIN 文件。</div>
+            <div id="result-9" style="display:none;">
+                <div class="section-title">Voc · Jsc · FF · PCE 统计</div>
+                <div class="card plot-card" style="padding:12px;margin-top:18px;background:#fff;"><div id="plot-9" style="height:580px;width:100%;"></div></div>
+                <div class="action-row"><button class="btn btn-secondary" style="height:42px" onclick="exportBoxPlot('svg')">导出 SVG</button></div>
+            </div>
+        </div>
+    </div>
+
+    <dialog id="rename-dialog">
+        <div class="dialog-body">
+            <div class="section-title">确认文件重命名</div>
+            <div id="rename-folder" class="fit-status"></div>
+            <div id="rename-warning" class="rename-warning"></div>
+            <div class="table-container"><table id="rename-preview-table"></table></div>
+        </div>
+        <div class="dialog-actions">
+            <button class="btn btn-secondary" onclick="closeRenamePreview()">取消</button>
+            <button class="btn btn-primary" id="rename-confirm" onclick="confirmRename()">确认重命名</button>
+        </div>
+    </dialog>
+    <dialog id="method-dialog">
+        <div class="dialog-body">
+            <div class="section-title" id="method-title">方法说明</div>
+            <div id="method-content" style="line-height:1.75;color:#334155"></div>
+        </div>
+        <div class="dialog-actions"><button class="btn btn-primary" onclick="document.getElementById('method-dialog').close()">关闭</button></div>
+    </dialog>
+    <dialog id="update-dialog">
+        <div class="dialog-body">
+            <div class="section-title">软件更新</div>
+            <div id="update-status" class="fit-status">尚未检查。</div>
+            <pre id="update-notes" style="white-space:pre-wrap;max-height:220px;overflow:auto"></pre>
+        </div>
+        <div class="dialog-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('update-dialog').close()">稍后提醒</button>
+            <button class="btn btn-primary" id="update-action" onclick="updateAction()">检查更新</button>
+        </div>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+let currentPCEFiles = null; let pceSeries = []; let currentExtFiles = null; let pceDataCache = []; let pceSort = {key:null,direction:'asc'}; let extAoaCache = []; let currentTRPLFiles = []; let trplResults = []; let trplView = 'all'; let selectedTRPL = 0; let trplRunId = 0; let eisResults = []; let mppResults = []; let upsFiles = []; let upsSamples = []; let upsRunId = 0; let upsDrawTarget = null; let upsPcbmLevels = {lumo:-3.90,homo:-5.63}; let upsPcbmError = ''; let sclcResults = []; let boxGroups = [];
+const SETTINGS_KEY='perovskite-workstation-settings-v1';
+const APP_VERSION=document.getElementById('app-version').textContent;
+let updatePollTimer=null; let updateState={status:'idle'};
+const SETTING_IDS=['pce-area','pce-abs','pce-log','ext-skip','ext-cols','ext-do-abs','ext-abs-col','ext-do-jv','ext-area','ext-do-math','ext-op','ext-val','ext-blank','fit-model','mpp-y-mode','mpp-voltage','mpp-area','mpp-light','mpp-smooth','sclc-area','sclc-polarity','sclc-smooth','box-area','rename-prefix','ups-smooth','ups-smooth-order','ups-smooth-window'];
+const METHOD_GUIDES={
+    1:['J–V 分析','Jsc 由 V = 0 两侧数据线性插值得到；Voc 由 I = 0 两侧数据线性插值得到。FF = Pmax / (Voc × Isc)，PCE (%) = Voc × Jsc × FF。器件面积以 cm² 输入。'],
+    2:['数据提取','按设置的跳过行数与列编号读取数据。电流密度换算为 J = I × 1000 / 面积；自定义运算只作用于第二个提取列。'],
+    3:['文件重命名','先生成旧名与新名预览并检查冲突，确认后才写入磁盘。中途失败会回滚本次已完成项目；仅保留最近一次成功操作用于撤销。'],
+    4:['TRPL 拟合','从强度峰值开始，将峰值时刻设为 0，再进行 ExpDec2 或 ExpDec3 非线性拟合。导出包含参数误差、残差、R²、调整 R²、约化 χ² 与积分平均寿命。'],
+    5:['EIS 绘图','Nyquist 图横轴为 Z′，纵轴为 −Z″。当前汇总的阻抗差定义为 |末点 Z′ − 首点 Z′|，不等同于等效电路拟合参数。'],
+    6:['MPP 绘图','电流密度 J = |I| / 面积，功率密度 = J × 电压，PCE = 功率密度 / 入射光强 × 100。平滑会修复短时掉点并分别处理启动段与稳定段。'],
+    7:['UPS 分析','功函数 Φ = 21.22 − Ecutoff；VBM = −(Φ + Eonset)；CBM = VBM + Eg。曲线默认先做 Savitzky-Golay 平滑（2 阶 / 7 点，可在配对区调整），平滑发生在归一化与拟合之前。自动拟合结果可用手动画线覆盖，导出会注明自动或手动。'],
+    8:['SCLC 分析','电流密度 J = |I| / 面积；按所选正/负偏压筛选后使用双对数坐标。可选平滑为 4 点后向移动平均，不会覆盖原始数据。'],
+    9:['统计箱线图','四分位数采用线性插值；须线显示样本最小值和最大值，并叠加所有器件原始散点。统计结果沿用 J–V 的 Voc/Jsc 插值算法。']
+};
+let toastTimer;
+function openMethodGuide() { const mode=Number(document.querySelector('input[name="mode"]:checked').value),guide=METHOD_GUIDES[mode];document.getElementById('method-title').textContent=guide[0]+' · 方法说明';document.getElementById('method-content').textContent=guide[1];document.getElementById('method-dialog').showModal(); }
+function showToast(message) { const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),3200); }
+function openUpdateDialog() { document.getElementById('update-dialog').showModal(); updateAction(); }
+function updateHasUnsavedData() { return Boolean(currentPCEFiles||currentExtFiles||currentTRPLFiles.length||eisResults.length||mppResults.length||upsFiles.length||sclcResults.length||boxGroups.some(group=>group.results?.length)); }
+function updateTaskRunning() { return Boolean(upsSamples.some(sample=>sample.status==='running') || /正在/.test(document.getElementById('fit-progress')?.textContent||'') || /正在/.test(document.getElementById('ups-status')?.textContent||'')); }
+function renderUpdateState() {
+    const status=document.getElementById('update-status'), notes=document.getElementById('update-notes'), action=document.getElementById('update-action');
+    if(!status||!action)return;
+    const release=updateState.release;
+    if(updateState.status==='checking'){status.textContent='正在检查更新…';action.disabled=true;}
+    else if(updateState.status==='available'){status.textContent=`发现新版本 v${release.version}，点击下载并校验。`;notes.textContent=release.notes||'暂无更新日志。';action.disabled=false;action.textContent='下载更新';}
+    else if(updateState.status==='downloading'){status.textContent=`正在下载并验证安装包… ${updateState.progress||0}%`;action.disabled=true;}
+    else if(updateState.status==='ready'){status.textContent='安装包已通过 SHA-256 和发布者签名验证。';action.disabled=false;action.textContent='立即更新';}
+    else if(updateState.status==='up-to-date'){status.textContent='当前已是最新版本。';action.disabled=false;action.textContent='重新检查';}
+    else if(updateState.status==='error'){status.textContent='更新失败：'+(updateState.error||'未知错误');action.disabled=false;action.textContent='重新检查';}
+    else {status.textContent='尚未检查。';action.disabled=false;action.textContent='检查更新';}
+}
+async function pollUpdateState() { try { updateState=await window.pywebview.api.update_status_python();renderUpdateState();if(['checking','downloading'].includes(updateState.status))updatePollTimer=setTimeout(pollUpdateState,500); } catch(error) { updateState={status:'error',error:error.message};renderUpdateState(); } }
+async function checkForUpdates(showDialog=false) { if(showDialog)document.getElementById('update-dialog').showModal(); await window.pywebview.api.check_update_python(APP_VERSION); await pollUpdateState(); }
+async function updateAction() { if(updateState.status==='available'){ await window.pywebview.api.download_update_python(); await pollUpdateState(); return; } if(updateState.status==='ready'){ const result=await window.pywebview.api.launch_update_python(updateHasUnsavedData(),updateTaskRunning()); if(result.status==='blocked'||result.status==='error')alert(result.message); else window.close(); return; } await checkForUpdates(true); }
+async function exportPlot(plotId,baseName,format='png',width=1200,height=720) { try { const data=await Plotly.toImage(plotId,{format,width,height,scale:format==='png'?2:1});const response=await window.pywebview.api.save_plot_python(`${baseName}.${format}`,data);if(response==='success')showToast(`图像已导出为 ${format.toUpperCase()}。`);else if(response?.startsWith('error:'))alert('图片导出失败：'+response.slice(6)); } catch(error) { alert('图片导出失败：'+(error.message||error)); } }
+function showBatchErrors(resultId,failed) { let panel=document.querySelector(`#${resultId} .batch-errors`);if(!panel){panel=document.createElement('div');panel.className='card batch-errors';document.getElementById(resultId).prepend(panel);}panel.style.display=failed.length?'block':'none';panel.innerHTML=failed.length?`<strong>已跳过 ${failed.length} 个文件</strong><div class="rename-warning">${failed.map(name=>escapeHTML(name)).join('<br>')}</div>`:''; }
+function appendMethodSheet(workbook,module,parameters,files) { const rows=[['Perovskite Workstation · Laboratory Edition'],['software_version',APP_VERSION],['analysis_module',module],['exported_at',new Date().toISOString()],[],['parameter','value'],...Object.entries(parameters),[],['input_file'],...files.map(name=>[name])];XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),'Method'); }
+function collectSettings() { const values={};SETTING_IDS.forEach(id=>{const element=document.getElementById(id);if(element)values[id]=element.type==='checkbox'?element.checked:element.value;});return values; }
+function applySettings(values) { SETTING_IDS.forEach(id=>{const element=document.getElementById(id);if(!element||values[id]===undefined)return;if(element.type==='checkbox')element.checked=values[id]===true;else element.value=String(values[id]);});toggleRenameMode();['ext-abs-target','ext-jv-area','ext-math-box'].forEach((id,index)=>document.getElementById(id).style.display=document.getElementById(['ext-do-abs','ext-do-jv','ext-do-math'][index]).checked?(id==='ext-math-box'?'flex':'block'):'none'); }
+function saveSettings() { localStorage.setItem(SETTINGS_KEY,JSON.stringify(collectSettings())); }
+function restoreSettings() { try { applySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch(error) { localStorage.removeItem(SETTINGS_KEY); } }
+async function exportSettings() { const payload={format:'perovskite-workstation-settings',version:1,software_version:APP_VERSION,exported_at:new Date().toISOString(),values:collectSettings()};const response=await window.pywebview.api.save_settings_python(payload);if(response==='success')showToast('实验室配置已导出。');else if(response?.startsWith('error:'))alert('配置导出失败：'+response.slice(6)); }
+async function importSettings() { try { const response=await window.pywebview.api.load_settings_python();if(response?.status==='cancelled')return;if(response?.status!=='success')throw new Error(response?.message||'配置读取失败');if(response.settings.version!==1||!response.settings.values||typeof response.settings.values!=='object')throw new Error('配置文件版本不受支持');applySettings(response.settings.values);saveSettings();if(pceSeries.length)triggerPCE();if(currentExtFiles)triggerExt();if(mppResults.length)renderMPP();if(sclcResults.length)renderSCLC();if(boxGroups.some(group=>group.results.length))recalculateBoxGroups();showToast('实验室配置已导入。TRPL 已有结果不会自动重新拟合。'); } catch(error) { alert('配置导入失败：'+(error.message||error)); } }
+function triggerPCE() { if(pceSeries.length) { recalculateAllPCE(); renderPCE(); } }
+function triggerExt() { if(currentExtFiles) processExtract(currentExtFiles); }
+function switchMode() {
+    let mode = document.querySelector('input[name="mode"]:checked').value;
+    const titles = {"1":["光电曲线分析","J–V 性能计算 · PL / TRPL 曲线观察"],"2":["数据提取","整理 TXT / BIN 实验数据"],"3":["文件重命名","批量规范实验文件名称"],"4":["TRPL 指数拟合","ExpDec2 / ExpDec3 拟合 · 积分平均寿命 · 拟合优度"],"5":["EIS 绘图","Nyquist 曲线 · 首尾阻抗差"],"6":["MPP 绘图","多曲线 MPP Tracking · 原始数据查看"],"7":["UPS 分析","批量配对 · 自动/手动拟合 · 动态能级图"],"8":["SCLC 分析","单载流子器件 · 电流密度双对数曲线"],"9":["统计箱线图","彩色箱体 · 中位线 · 原始散点"]};
+    document.getElementById('page-title').textContent = titles[mode][0];
+    document.getElementById('page-subtitle').textContent = titles[mode][1];
+    document.getElementById('pce-toolbar').style.display = mode === "1" ? 'flex' : 'none';
+    document.getElementById('trpl-toolbar').style.display = mode === "4" ? 'flex' : 'none';
+    document.getElementById('eis-toolbar').style.display = mode === "5" ? 'flex' : 'none';
+    document.getElementById('mpp-toolbar').style.display = mode === "6" ? 'flex' : 'none';
+    document.getElementById('ups-toolbar').style.display = mode === "7" ? 'flex' : 'none';
+    document.getElementById('sclc-toolbar').style.display = mode === "8" ? 'flex' : 'none';
+    document.getElementById('box-toolbar').style.display = mode === "9" ? 'flex' : 'none';
+    for(let i=1; i<=9; i++) {
+        document.getElementById(`cfg-mode-${i}`) && (document.getElementById(`cfg-mode-${i}`).style.display = (i==mode)?'block':'none');
+        document.getElementById(`ui-mode-${i}`).style.display = (i==mode)?'block':'none';
+    }
+}
+function toggleOpt(id) { let el = document.getElementById(id); el.style.display = el.style.display === 'none' ? (id==='ext-math-box'?'flex':'block') : 'none'; }
+function toggleRenameMode() { let v = document.querySelector('input[name="rename_type"]:checked').value; document.getElementById('rename-prefix-box').style.display = (v === "1") ? 'block' : 'none'; }
+function clearUI(mode) {
+    const fileInput = document.getElementById(`file-${mode}`); if(fileInput) fileInput.value = "";
+    document.getElementById(`result-${mode}`).style.display = "none";
+    const uploadRow = document.getElementById(`upload-row-${mode}`); if(uploadRow) uploadRow.style.display = 'flex';
+    if(mode === 1) { currentPCEFiles = null; pceSeries = []; pceDataCache = []; pceSort = {key:null,direction:'asc'}; } if(mode === 2) currentExtFiles = null;
+    if(mode === 4) { trplRunId++; currentTRPLFiles = []; trplResults = []; trplView = 'all'; selectedTRPL = 0; document.getElementById('fit-progress').textContent = '自动从强度峰值开始，并将峰值时刻设为 0。寿命单位与时间列一致。'; }
+    if(mode === 5) eisResults = [];
+    if(mode === 6) mppResults = [];
+    if(mode === 7) { upsRunId++; upsFiles = []; upsSamples = []; upsDrawTarget = null; upsPcbmError = ''; upsEnergyMode = 'reference'; document.querySelectorAll('[data-energy-mode]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.energyMode === 'reference')); syncUPSPCBMInputs(); document.getElementById('ups-pairs').innerHTML = ''; document.getElementById('ups-fit-controls').innerHTML = ''; document.getElementById('ups-summary-table').innerHTML = ''; document.getElementById('ups-curves').innerHTML = ''; document.getElementById('ups-analysis').style.display = 'none'; }
+    if(mode === 8) sclcResults = [];
+    if(mode === 9) { boxGroups = []; addBoxGroup(); renderBoxPlot(); }
+}
+function requestClear(mode) { if(confirm('确定清空当前模块中尚未导出的数据吗？')) clearUI(mode); }
+function replaceTRPL() { clearUI(4); document.getElementById('file-4').click(); }
+function refitTRPL() { if(currentTRPLFiles.length) processTRPL(currentTRPLFiles, false); }
+['drop-1', 'drop-2', 'drop-4', 'drop-5', 'drop-6', 'drop-7', 'drop-8'].forEach(id => {
+    let el = document.getElementById(id);
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dragover'); });
+    el.addEventListener('dragleave', e => { el.classList.remove('dragover'); });
+    el.addEventListener('drop', e => {
+        e.preventDefault(); el.classList.remove('dragover');
+        let fileInput = el.querySelector('input[type="file"]'); fileInput.files = e.dataTransfer.files; 
+        if(id === 'drop-1') processPCE(e.dataTransfer.files); if(id === 'drop-2') processExtract(e.dataTransfer.files); if(id === 'drop-4') processTRPL(e.dataTransfer.files); if(id === 'drop-5') processEIS(e.dataTransfer.files); if(id === 'drop-6') processMPP(e.dataTransfer.files); if(id === 'drop-7') loadUPSFiles(e.dataTransfer.files); if(id === 'drop-8') processSCLC(e.dataTransfer.files);
+    });
+});
+function getEISMetrics(zReal) {
+    return {start:zReal[0], end:zReal[zReal.length-1], delta:Math.abs(zReal[zReal.length-1]-zReal[0])};
+}
+console.assert(getEISMetrics([14.495,413.38]).delta === 398.885);
+async function processEIS(files) {
+    if (!files.length) return;
+    eisResults = [];
+    const failed = [];
+    for (const file of files) {
+        const rows = (await file.text()).split(/\r?\n/).map(line => line.trim().split(/[\s,;]+/).map(Number)).filter(row => row.length >= 3 && row.slice(0,3).every(Number.isFinite));
+        if (rows.length < 2) { failed.push(file.name); continue; }
+        const frequency = rows.map(row=>row[0]), zReal = rows.map(row=>row[1]), zImag = rows.map(row=>row[2]);
+        eisResults.push({name:file.name,frequency,zReal,zImag,metrics:getEISMetrics(zReal)});
+    }
+    if (!eisResults.length) { alert('未找到足够的 EIS 数据，请确认前三列为频率、Z′ 和 Z″。'); return; }
+    document.getElementById('upload-row-5').style.display = 'none';
+    document.getElementById('result-5').style.display = 'block';
+    const traces = eisResults.map(item=>({x:item.zReal,y:item.zImag.map(value=>-value),mode:'lines+markers',name:item.name,line:{width:2},marker:{size:6},hovertemplate:`${item.name}<br>Z′: %{x:.6g} Ω<br>−Z″: %{y:.6g} Ω<extra></extra>`}));
+    Plotly.newPlot('plot-5', traces, {
+        title:{text:'Nyquist',x:.5,font:{size:18}},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',color:'#17212b',size:13},
+        xaxis:{title:'Z′ (Ω)',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb',zeroline:false},yaxis:{title:'−Z″ (Ω)',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb',zeroline:false,scaleanchor:'x',scaleratio:1},
+        legend:{orientation:'h',x:0,y:1.12},margin:{l:75,r:32,t:82,b:66},hovermode:'closest'
+    }, {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+    const show = value => Number(value.toPrecision(7));
+    document.getElementById('eis-summary-table').innerHTML = '<tr><th>文件</th><th>起始 Z′ (Ω)</th><th>终点 Z′ (Ω)</th><th>|ΔZ′| (Ω)</th><th>点数</th></tr>' + eisResults.map(item=>`<tr><td>${escapeHTML(item.name)}</td><td>${show(item.metrics.start)}</td><td>${show(item.metrics.end)}</td><td>${show(item.metrics.delta)}</td><td>${item.frequency.length}</td></tr>`).join('');
+    document.getElementById('eis-data-table').innerHTML = '<tr><th>文件</th><th>Frequency (Hz)</th><th>Z′ (Ω)</th><th>Z″ (Ω)</th><th>−Z″ (Ω)</th></tr>' + eisResults.flatMap(item=>item.frequency.map((frequency,index)=>`<tr><td>${escapeHTML(item.name)}</td><td>${frequency}</td><td>${item.zReal[index]}</td><td>${item.zImag[index]}</td><td>${-item.zImag[index]}</td></tr>`)).join('');
+    showBatchErrors('result-5',failed); if(failed.length) showToast(`EIS：${failed.length} 个文件无法识别，已在结果区列出。`);
+}
+async function exportEIS() {
+    if (!eisResults.length) return;
+    const workbook = XLSX.utils.book_new(), used = new Set(['summary']);
+    const summary = [['file','start_Z_real_ohm','end_Z_real_ohm','delta_Z_real_ohm','points'],...eisResults.map(item=>[item.name,item.metrics.start,item.metrics.end,item.metrics.delta,item.frequency.length])];
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(summary),'Summary');
+    eisResults.forEach(item => {
+        const rows = [['Frequency_Hz','Z_real_ohm','Z_imag_ohm','minus_Z_imag_ohm'],...item.frequency.map((frequency,index)=>[frequency,item.zReal[index],item.zImag[index],-item.zImag[index]])];
+        XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),safeSheetName(item.name,used));
+    });
+    appendMethodSheet(workbook,'EIS',{formula:'Nyquist y = -Z imaginary; delta Z real = |last - first|'},eisResults.map(item=>item.name));
+    const response = await window.pywebview.api.save_excel_python('EIS_Data.xlsx',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+    if (response === 'success') showToast('EIS 数据已导出。');
+    else if (response && response.startsWith('error:')) alert('导出失败：' + response.slice(6));
+}
+async function processMPP(files) {
+    if (!files.length) return;
+    mppResults = [];
+    const failed = [];
+    for (const file of files) {
+        const rows = (await file.text()).split(/\r?\n/).map(line=>line.trim().split(/[\s,;]+/).map(Number)).filter(row=>row.length>=2 && row.slice(0,2).every(Number.isFinite));
+        if (rows.length < 2) { failed.push(file.name); continue; }
+        mppResults.push({name:file.name,time:rows.map(row=>row[0]),currentMa:rows.map(row=>row[1]*1000)});
+    }
+    if (!mppResults.length) { alert('未找到足够的 MPP 数据，请确认前两列为时间和电流。'); return; }
+    document.getElementById('upload-row-6').style.display = 'none';
+    document.getElementById('result-6').style.display = 'block';
+    renderMPP();
+    showBatchErrors('result-6',failed); if(failed.length) showToast(`MPP：${failed.length} 个文件无法识别，已在结果区列出。`);
+}
+async function processSCLC(files) {
+    if (!files.length) return;
+    sclcResults = [];
+    const failed = [];
+    for (const file of files) {
+        const rows = (await file.text()).split(/\r?\n/).map(line=>line.trim().split(/[\s,;]+/).map(Number)).filter(row=>row.length>=2 && row.slice(0,2).every(Number.isFinite));
+        if (rows.length < 2) { failed.push(file.name); continue; }
+        sclcResults.push({name:file.name,voltage:rows.map(row=>row[0]),current:rows.map(row=>row[1])});
+    }
+    if (!sclcResults.length) { alert('未找到足够的 SCLC 数据，请确认前两列为电压和电流。'); return; }
+    document.getElementById('upload-row-8').style.display = 'none';
+    document.getElementById('result-8').style.display = 'block';
+    renderSCLC();
+    showBatchErrors('result-8',failed); if(failed.length) showToast(`SCLC：${failed.length} 个文件无法识别，已在结果区列出。`);
+}
+function getSCLCSettings() {
+    const area = Number(document.getElementById('sclc-area').value);
+    return area > 0 ? {area,polarity:document.getElementById('sclc-polarity').value} : null;
+}
+function convertSCLC(voltage, current, area) {
+    return {voltage:Math.abs(voltage),currentDensity:Math.abs(current)/area};
+}
+console.assert(Math.abs(convertSCLC(1,7.065e-5,.07065).currentDensity-.001)<1e-12);
+function smoothSCLC(values) {
+    return values.map((_,index)=>{const start=Math.max(0,index-3),window=values.slice(start,index+1);return window.reduce((sum,value)=>sum+value,0)/window.length;});
+}
+console.assert(JSON.stringify(smoothSCLC([1,3,5,7,9]))===JSON.stringify([1,2,3,4,6]));
+function selectedSCLCData(item, settings) {
+    const rows = item.voltage.map((voltage,index)=>({rawVoltage:voltage,rawCurrent:item.current[index],...convertSCLC(voltage,item.current[index],settings.area)}))
+        .filter(row=>(settings.polarity==='positive'?row.rawVoltage>0:row.rawVoltage<0) && row.currentDensity>0)
+        .sort((a,b)=>a.voltage-b.voltage);
+    const smoothed=smoothSCLC(rows.map(row=>row.rawCurrent));
+    rows.forEach((row,index)=>row.smoothedCurrentDensity=Math.abs(smoothed[index])/settings.area);
+    return rows;
+}
+function renderSCLC() {
+    if (!sclcResults.length) return;
+    const settings = getSCLCSettings(), status = document.getElementById('sclc-data-status');
+    if (!settings) { status.textContent = '器件面积必须大于 0。'; return; }
+    const selected = sclcResults.map(item=>({item,rows:selectedSCLCData(item,settings)}));
+    const smoothing=document.getElementById('sclc-smooth').checked;
+    const traces = selected.filter(entry=>entry.rows.length).map(({item,rows})=>({x:rows.map(row=>row.voltage),y:rows.map(row=>smoothing?row.smoothedCurrentDensity:row.currentDensity),mode:'lines',name:item.name,line:{width:2},hovertemplate:`${item.name}<br>|V|: %{x:.6g} V<br>|J|: %{y:.6g} A/cm²<extra></extra>`}));
+    Plotly.react('plot-8', traces, {
+        title:{text:`SCLC · ${settings.polarity==='positive'?'正':'负'}偏压`,x:.5,font:{size:18}},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',color:'#17212b',size:13},
+        xaxis:{title:'|Voltage| (V)',type:'log',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb'},yaxis:{title:'|Current density| (A/cm²)',type:'log',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb'},
+        legend:{orientation:'h',x:0,y:1.12},margin:{l:82,r:32,t:82,b:70},hovermode:'closest'
+    }, {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+    const allRows = selected.flatMap(({item,rows})=>rows.map(row=>[item.name,row.rawVoltage,row.rawCurrent,row.voltage,row.currentDensity,row.smoothedCurrentDensity]));
+    status.textContent = `面积 ${settings.area} cm²；${settings.polarity==='positive'?'正':'负'}偏压；${smoothing?'已开启 4 点移动平均；':'未平滑；'}显示前 ${Math.min(5000,allRows.length).toLocaleString()} / ${allRows.length.toLocaleString()} 行。`;
+    document.getElementById('sclc-data-table').innerHTML = '<tr><th>文件</th><th>Raw voltage (V)</th><th>Raw current (A)</th><th>|Voltage| (V)</th><th>Raw |J| (A/cm²)</th><th>Smoothed |J| (A/cm²)</th></tr>' + allRows.slice(0,5000).map(row=>`<tr><td>${escapeHTML(row[0])}</td>${row.slice(1).map(value=>`<td>${Number(value.toPrecision(8))}</td>`).join('')}</tr>`).join('');
+}
+async function exportSCLC() {
+    const settings = getSCLCSettings();
+    if (!sclcResults.length || !settings) { alert('请先导入数据并设置有效面积。'); return; }
+    const workbook=XLSX.utils.book_new(),used=new Set(['summary']);
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['device_area_cm2',settings.area],['polarity',settings.polarity],['smoothing','4-point moving average'],[],['file','points'],...sclcResults.map(item=>[item.name,selectedSCLCData(item,settings).length])]),'Summary');
+    sclcResults.forEach(item=>{const rows=selectedSCLCData(item,settings);XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['Raw_voltage_V','Raw_current_A','Absolute_voltage_V','Raw_absolute_current_density_A_cm2','Smoothed_absolute_current_density_A_cm2'],...rows.map(row=>[row.rawVoltage,row.rawCurrent,row.voltage,row.currentDensity,row.smoothedCurrentDensity])]),safeSheetName(item.name,used));});
+    appendMethodSheet(workbook,'SCLC',{device_area_cm2:settings.area,polarity:settings.polarity,smoothing:document.getElementById('sclc-smooth').checked?'4-point trailing moving average':'none',formula:'J = |I| / area'},sclcResults.map(item=>item.name));
+    const response=await window.pywebview.api.save_excel_python('SCLC_Data.xlsx',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+    if(response==='success') showToast('SCLC 数据已导出。'); else if(response?.startsWith('error:')) alert('导出失败：'+response.slice(6));
+}
+async function exportSCLCPlot(format='png') {
+    if (!sclcResults.length) return;
+    await exportPlot('plot-8','SCLC_Plot',format,1200,720);
+}
+function getMPPSettings() {
+    const voltage = Number(document.getElementById('mpp-voltage').value), area = Number(document.getElementById('mpp-area').value), light = Number(document.getElementById('mpp-light').value);
+    return voltage > 0 && area > 0 && light > 0 ? {voltage,area,light,mode:document.getElementById('mpp-y-mode').value} : null;
+}
+function convertMPP(currentMa, settings) {
+    const currentDensity = Math.abs(currentMa) / settings.area, powerDensity = currentDensity * settings.voltage;
+    return {currentDensity,powerDensity,pce:powerDensity/settings.light*100};
+}
+console.assert(Math.abs(convertMPP(1.5867,{voltage:.9,area:.07065,light:100}).pce-20.2127388535)<1e-9);
+function smoothMPPSeries(values) {
+    if (values.length < 11) return [...values];
+    const absolute = values.map(Math.abs), peak = Math.max(...absolute), start = absolute.findIndex(value=>value>=peak*.8), radius = 250, baseline = [], deque = [];
+    let right = -1;
+    for (let index=0; index<values.length; index++) {
+        while (right < Math.min(values.length-1,index+radius)) { right++; while(deque.length && absolute[deque[deque.length-1]]<=absolute[right]) deque.pop(); deque.push(right); }
+        while(deque.length && deque[0]<index-radius) deque.shift();
+        baseline.push(absolute[deque[0]]);
+    }
+    const corrected = [...values], bad = absolute.map((value,index)=>index>start+radius && value<baseline[index]*.8);
+    for (let index=0; index<values.length;) {
+        if (!bad[index]) { index++; continue; }
+        const from=index-1; while(index<values.length && bad[index]) index++; const to=index;
+        if (from>=0 && to<values.length) for(let point=from+1;point<to;point++) corrected[point]=corrected[from]+(corrected[to]-corrected[from])*(point-from)/(to-from);
+    }
+    const prefix=[0]; corrected.forEach(value=>prefix.push(prefix[prefix.length-1]+value));
+    const average=(index,segmentStart,segmentEnd,halfWindow)=>{const left=Math.max(segmentStart,index-halfWindow),end=Math.min(segmentEnd,index+halfWindow+1);return (prefix[end]-prefix[left])/(end-left);};
+    return corrected.map((value,index)=>index<start?average(index,0,start,25):average(index,start,values.length,100));
+}
+const mppSmoothCheck=smoothMPPSeries([...Array(120).fill(0),4,...Array(120).fill(0),...Array(300).fill(20)]);
+console.assert(mppSmoothCheck.every(Number.isFinite) && mppSmoothCheck[120]<1 && mppSmoothCheck[240]<1 && mppSmoothCheck[241]>19);
+function renderMPP() {
+    if (!mppResults.length) return;
+    const settings = getMPPSettings();
+    if (!settings) { document.getElementById('mpp-data-status').textContent = '电压、面积和光强必须大于 0。'; return; }
+    const pceMode = settings.mode === 'pce', smoothing = document.getElementById('mpp-smooth').checked;
+    const plotted = mppResults.map(item=>({...item,plotCurrentMa:smoothing?smoothMPPSeries(item.currentMa):item.currentMa}));
+    const traces = plotted.map(item=>({x:item.time,y:item.plotCurrentMa.map(value=>pceMode?convertMPP(value,settings).pce:value),mode:'lines',name:item.name,line:{width:2},hovertemplate:pceMode?`${item.name}<br>Time: %{x:.6g} s<br>PCE: %{y:.5g}%<extra></extra>`:`${item.name}<br>Time: %{x:.6g} s<br>Current: %{y:.6g} mA<extra></extra>`}));
+    Plotly.newPlot('plot-6', traces, {
+        title:{text:'MPP Tracking',x:.5,font:{size:18}},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',color:'#17212b',size:13},
+        xaxis:{title:'Time (s)',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb',zeroline:false},yaxis:{title:pceMode?'PCE (%)':'Current (mA)',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb',zeroline:false},
+        legend:{orientation:'h',x:0,y:1.12},margin:{l:75,r:32,t:82,b:66},hovermode:'closest'
+    }, {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+    const allRows = plotted.flatMap(item=>item.time.map((time,index)=>{const raw=item.currentMa[index],displayed=item.plotCurrentMa[index],rawPce=convertMPP(raw,settings).pce,displayedPce=convertMPP(displayed,settings).pce; return [item.name,time,raw/1000,raw,displayed,rawPce,displayedPce];}));
+    // shortcut: 表格预览限制为 5000 行，需要表格分页时再升级。
+    document.getElementById('mpp-data-status').textContent = `显示前 ${Math.min(5000,allRows.length).toLocaleString()} / ${allRows.length.toLocaleString()} 行；绘图使用全部数据。${smoothing?' 已开启平滑。':''}`;
+    document.getElementById('mpp-data-table').innerHTML = '<tr><th>文件</th><th>Time (s)</th><th>Raw current (A)</th><th>Raw current (mA)</th><th>Plotted current (mA)</th><th>Raw PCE (%)</th><th>Plotted PCE (%)</th></tr>' + allRows.slice(0,5000).map(row=>`<tr><td>${escapeHTML(row[0])}</td>${row.slice(1).map(value=>`<td>${Number(value.toPrecision(8))}</td>`).join('')}</tr>`).join('');
+}
+async function exportMPP() {
+    if (!mppResults.length) return;
+    const settings = getMPPSettings();
+    if (!settings) { alert('电压、面积和光强必须大于 0。'); return; }
+    const workbook = XLSX.utils.book_new(), used = new Set(['summary']), smoothing = document.getElementById('mpp-smooth').checked;
+    const summary = [['MPP_voltage_V',settings.voltage],['device_area_cm2',settings.area],['light_intensity_mW_cm2',settings.light],['smoothing_enabled',smoothing?'yes':'no'],[],['file','maximum_plotted_PCE_percent','mean_plotted_PCE_after_50s_percent','final_plotted_PCE_percent','points']];
+    mppResults.forEach(item=>{const plotted=smoothing?smoothMPPSeries(item.currentMa):item.currentMa,pce=plotted.map(value=>convertMPP(value,settings).pce),stable=pce.filter((_,index)=>item.time[index]>=50); summary.push([item.name,Math.max(...pce),stable.length?stable.reduce((a,b)=>a+b,0)/stable.length:'',pce[pce.length-1],item.time.length]);});
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(summary),'Summary');
+    mppResults.forEach(item=>{const plotted=smoothing?smoothMPPSeries(item.currentMa):item.currentMa,rows=[['Time_s','Raw_current_A','Raw_current_mA','Plotted_current_mA','Raw_PCE_percent','Plotted_PCE_percent'],...item.time.map((time,index)=>{const raw=item.currentMa[index],displayed=plotted[index];return [time,raw/1000,raw,displayed,convertMPP(raw,settings).pce,convertMPP(displayed,settings).pce];})]; XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),safeSheetName(item.name,used));});
+    appendMethodSheet(workbook,'MPP',{voltage_V:settings.voltage,device_area_cm2:settings.area,light_intensity_mW_cm2:settings.light,smoothing:smoothing?'enabled':'disabled',formula:'PCE = |I_mA| / area * voltage / light * 100'},mppResults.map(item=>item.name));
+    const response = await window.pywebview.api.save_excel_python('MPP_Converted_Data.xlsx',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+    if (response === 'success') showToast('MPP 换算数据已导出。');
+    else if (response && response.startsWith('error:')) alert('导出失败：' + response.slice(6));
+}
+async function parseChiBin(file) {
+    const buffer = await file.arrayBuffer(), view = new DataView(buffer);
+    if(buffer.byteLength < 1457 || String.fromCharCode(...new Uint8Array(buffer,8,3))!=='LSV') return {v:[],i:[]};
+    const start=view.getFloat32(853,true), target=view.getFloat32(857,true), step=Math.abs(view.getFloat32(885,true));
+    const points=Math.round(Math.abs(start-target)/step), dataOffset=buffer.byteLength-points*4;
+    if(!Number.isFinite(start)||!Number.isFinite(target)||!(step>0)||!(points>0)||dataOffset!==1453) return {v:[],i:[]};
+    const direction=target>=start?1:-1, v_list=[], i_list=[];
+    for(let index=0;index<points;index++) { v_list.push(start+direction*step*index); i_list.push(view.getFloat32(dataOffset+index*4,true)); }
+    return {v:v_list,i:i_list,start,end:v_list[v_list.length-1],step:direction*step,technique:'Linear Sweep Voltammetry (LSV)'};
+}
+function formatBinAsTxt(data, sourceName) {
+    const decimals=Math.max(0,Math.ceil(-Math.log10(Math.abs(data.step))));
+    return `Source: ${sourceName}\nTechnique: ${data.technique}\nPoints: ${data.v.length}\nPotential start (V): ${data.start.toFixed(decimals)}\nPotential end (V): ${data.end.toFixed(decimals)}\nPotential step (V): ${data.step.toFixed(decimals)}\n\nPotential (V)\tCurrent (A)\n` + data.v.map((value,index)=>`${value.toFixed(decimals)}\t${data.i[index].toExponential(9)}`).join('\n');
+}
+async function convertBinToTxt(files) {
+    if(!files.length) return;
+    const converted = [], failed = [];
+    for(const file of files) {
+        const data = await parseChiBin(file);
+        if(!data.v.length) { failed.push(file.name); continue; }
+        converted.push({name:file.name.replace(/\.bin$/i,'.txt'),content:formatBinAsTxt(data,file.name)});
+    }
+    if(!converted.length) { alert('未找到可转换的 BIN 数据。'); document.getElementById('file-bin-txt').value=''; return; }
+    try {
+        const response = await window.pywebview.api.save_text_files_python(converted,failed);
+        if(response?.startsWith('success:')) { const message=`已转换 ${response.split(':')[1]} 个 TXT 文件。${failed.length?`${failed.length} 个失败，清单已写入输出目录。`:''}`; document.getElementById('bin-convert-status').textContent=message; showToast(message); }
+        else if(response?.startsWith('error:')) alert('转换失败：'+response.slice(6));
+    } catch(error) { alert('环境错误：未能连接到底层 Python 引擎。'); }
+    document.getElementById('file-bin-txt').value='';
+}
+async function convertBinFolders() {
+    const status = document.getElementById('bin-convert-status');
+    status.textContent = '请选择源文件夹，然后选择输出文件夹…';
+    try {
+        const response = await window.pywebview.api.convert_bin_folders_python();
+        if(response?.status==='success') {
+            const message = response.converted ? `已转换 ${response.converted} 个 BIN 文件${response.failed?`，${response.failed} 个失败，清单已写入输出目录`:''}。` : (response.failed ? `${response.failed} 个文件转换失败，清单已写入输出目录。` : '所选文件夹中没有找到 BIN 文件。');
+            status.textContent = message; showToast(message);
+        } else if(response?.status==='error') { status.textContent='转换失败。'; alert('转换失败：'+response.message); }
+        else status.textContent='已取消转换。';
+    } catch(error) { status.textContent='无法连接桌面转换服务。'; alert('环境错误：未能连接到底层 Python 引擎。'); }
+}
+async function parseTxt(file) {
+    const text = await file.text(); let v_list = [], i_list = [];
+    text.split('\n').forEach(line => { let parts = line.trim().split(/\s+/); if(parts.length >= 2) { let v = parseFloat(parts[0].replace(/,/g, '')); let i = parseFloat(parts[1].replace(/,/g, '')); if(!isNaN(v) && !isNaN(i)) { v_list.push(v); i_list.push(i); } } });
+    return {v: v_list, i: i_list, raw: text};
+}
+function interpolateAtZero(xValues,yValues) {
+    let nearest=0;
+    for(let index=0;index<xValues.length;index++) {
+        if(Math.abs(xValues[index])<Math.abs(xValues[nearest])) nearest=index;
+        if(xValues[index]===0) return yValues[index];
+        if(index && xValues[index-1]*xValues[index]<0) {
+            const ratio=-xValues[index-1]/(xValues[index]-xValues[index-1]);
+            return yValues[index-1]+ratio*(yValues[index]-yValues[index-1]);
+        }
+    }
+    return yValues[nearest];
+}
+function getPceFromLists(v_list, i_list, filename, apply_abs, area) {
+    if(!v_list.length || v_list.length!==i_list.length || !(area>0)) return null; let c_list = apply_abs ? i_list.map(x => Math.abs(x)) : [...i_list];
+    let isc=Math.abs(interpolateAtZero(v_list,c_list)),voc=Math.abs(interpolateAtZero(c_list,v_list));
+    let max_pow = 0.0; for(let i=0; i<v_list.length; i++) { let power = v_list[i] * c_list[i]; if(power > max_pow) max_pow = power; }
+    let jsc = (isc * 1000) / area; let ff = (isc * voc) !== 0 ? max_pow / (isc * voc) : 0.0; let pce = voc * jsc * ff;
+    return { "文件名": filename, "面积 (cm²)": area, "Voc (V)": voc.toFixed(4), "Jsc (mA/cm²)": jsc.toFixed(4), "FF": ff.toFixed(4), "PCE (%)": pce.toFixed(4) };
+}
+function calculatePCESeries(item) {
+    const doAbs = document.getElementById('pce-abs').checked, doLog = document.getElementById('pce-log').checked;
+    item.result = getPceFromLists(item.v, item.i, item.name, doAbs, item.area);
+    let currentDensity = item.i.map(value=>(doAbs?Math.abs(value):value)*1000/item.area);
+    if(doLog) currentDensity = currentDensity.map(value=>value!==0?Math.log10(Math.abs(value)):null);
+    const voltage = [], plottedCurrent = [], voc = Number(item.result["Voc (V)"]);
+    for(let index=0; index<item.v.length; index++) if(item.v[index]>=0 && item.v[index]<=voc) { voltage.push(item.v[index]); plottedCurrent.push(currentDensity[index]); }
+    item.trace = {x:voltage,y:plottedCurrent,mode:'lines',name:item.name,line:{width:2}};
+}
+function recalculateAllPCE() { pceSeries.forEach(calculatePCESeries); pceDataCache = pceSeries.map(item=>item.result); }
+function applyPCEAreaToAll() {
+    const input = document.getElementById('pce-area'), area = Number(input.value);
+    if(!(area>0)) { alert('面积必须大于 0。'); input.value = pceSeries[0]?.area || 0.07065; return; }
+    pceSeries.forEach(item=>item.area=area);
+    if(pceSeries.length) { recalculateAllPCE(); renderPCE(); }
+}
+function updatePCEArea(index, value) {
+    const area = Number(value);
+    if(!(area>0)) { alert('面积必须大于 0。'); renderPCE(); return; }
+    const item = pceSeries[index];
+    if(!item) return;
+    item.area = area; calculatePCESeries(item); pceDataCache[index] = item.result; renderPCE();
+}
+async function processPCE(files) {
+    if(files.length === 0) return;
+    const area = Number(document.getElementById('pce-area').value);
+    if(!(area>0)) { alert('面积必须大于 0。'); return; }
+    currentPCEFiles = files; pceSeries = []; pceSort = {key:null,direction:'asc'};
+    for(let f of files) {
+        let res = f.name.endsWith('.bin') ? await parseChiBin(f) : await parseTxt(f); let v_list = res.v, i_list = res.i;
+        if(v_list.length > 0) pceSeries.push({name:f.name,v:v_list,i:i_list,area});
+    }
+    recalculateAllPCE(); renderPCE();
+}
+function comparePCEValues(left,right,key) {
+    const a=Number(left),b=Number(right);
+    if(key!=='文件名'&&Number.isFinite(a)&&Number.isFinite(b)) return a-b;
+    return String(left).localeCompare(String(right),'zh-CN',{numeric:true,sensitivity:'base'});
+}
+function sortPCETable(key) {
+    pceSort = {key,direction:pceSort.key===key&&pceSort.direction==='asc'?'desc':'asc'};
+    renderPCETable();
+}
+function renderPCETable() {
+    if(!pceDataCache.length) return;
+    const headers=Object.keys(pceDataCache[0]),direction=pceSort.direction==='asc'?1:-1;
+    const rows=pceDataCache.map((row,index)=>({row,index}));
+    if(pceSort.key) rows.sort((left,right)=>comparePCEValues(left.row[pceSort.key],right.row[pceSort.key],pceSort.key)*direction||left.index-right.index);
+    let html=`<tr>${headers.map(key=>{const active=pceSort.key===key,arrow=active?(pceSort.direction==='asc'?'▲':'▼'):'↕',aria=active?(pceSort.direction==='asc'?'ascending':'descending'):'none';return `<th aria-sort="${aria}"><button class="sort-header" type="button" onclick='sortPCETable(${JSON.stringify(key)})'>${escapeHTML(key)}<span class="sort-arrow" aria-hidden="true">${arrow}</span></button></th>`}).join('')}</tr>`;
+    rows.forEach(({row,index})=>{html+=`<tr>${Object.entries(row).map(([key,value])=>key==='面积 (cm²)'?`<td><input type="number" min="0.000001" step="0.00001" value="${value}" onchange="updatePCEArea(${index},this.value)" aria-label="${escapeHTML(row['文件名'])} 面积"></td>`:`<td>${escapeHTML(value)}</td>`).join('')}</tr>`});
+    document.getElementById('table-1').innerHTML=html;
+}
+function renderPCE() {
+    if(pceDataCache.length > 0) {
+        const do_log = document.getElementById('pce-log').checked;
+        document.getElementById('upload-row-1').style.display = 'none';
+        document.getElementById('result-1').style.display = 'block';
+        let layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {family: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif', color: '#52606d', size: 12},
+            xaxis: {title: "Voltage (V)", showline: true, linecolor: '#cfd9df', gridcolor: '#edf1f3', zerolinecolor: '#cfd9df'},
+            yaxis: {title: do_log ? "log10(|Y|)" : "Current density (mA/cm²)", showline: true, linecolor: '#cfd9df', gridcolor: '#edf1f3', zerolinecolor: '#cfd9df'},
+            legend: {orientation: 'h', x: 0, y: 1.12, bgcolor: 'rgba(0,0,0,0)'},
+            hovermode: 'closest', margin: {l: 58, r: 20, t: 58, b: 54}
+        };
+        Plotly.newPlot('plot-1', pceSeries.map(item=>item.trace), layout, {responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d']});
+        renderPCETable();
+        const firstResult = pceDataCache[0];
+        document.getElementById('metric-voc').innerHTML = `${firstResult["Voc (V)"]} <small>V</small>`;
+        document.getElementById('metric-jsc').innerHTML = `${firstResult["Jsc (mA/cm²)"]} <small>mA/cm²</small>`;
+        document.getElementById('metric-ff').textContent = firstResult["FF"];
+        document.getElementById('metric-pce').innerHTML = `${firstResult["PCE (%)"]} <small>%</small>`;
+    }
+}
+function addBoxGroup() {
+    let number=1; while(boxGroups.some(group=>group.name===`组 ${number}`)) number++;
+    boxGroups.push({name:`组 ${number}`,files:[],curves:[],results:[]});
+    renderBoxGroups();
+}
+function removeBoxGroup(index) {
+    if(boxGroups.length === 1) boxGroups[0] = {name:'组 1',files:[],curves:[],results:[]};
+    else boxGroups.splice(index,1);
+    renderBoxGroups(); renderBoxPlot();
+}
+function updateBoxGroupName(index,value) {
+    if(!boxGroups[index]) return;
+    boxGroups[index].name = value.trim() || `组 ${index + 1}`;
+    renderBoxPlot();
+}
+function renderBoxGroups() {
+    const list = document.getElementById('box-group-list');
+    list.innerHTML = boxGroups.map((group,index)=>`<div class="box-group-card"><div class="box-group-head"><div><div class="control-label">实验组名称</div><input type="text" value="${escapeHTML(group.name)}" onchange="updateBoxGroupName(${index},this.value)"></div><div class="fit-status">${group.results.length?`已载入 ${group.results.length} 个有效文件`:'尚未导入文件'}</div><button class="btn btn-secondary" type="button" onclick="removeBoxGroup(${index})">${boxGroups.length===1?'清空组':'删除组'}</button></div><div class="box-group-drop" data-box-group="${index}" onclick="document.getElementById('box-files-${index}').click()"><svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4h16v-4"/></svg><div><strong>拖入或点击选择 J–V 文件</strong><span>支持多个 TXT / CHI LSV BIN；再次导入会追加并自动去重</span></div><input type="file" id="box-files-${index}" multiple accept=".txt,.bin" style="display:none" onclick="event.stopPropagation()" onchange="loadBoxGroupFiles(${index},this.files);this.value='' "></div></div>`).join('');
+    list.querySelectorAll('[data-box-group]').forEach(zone=>{
+        const index=Number(zone.dataset.boxGroup);
+        zone.addEventListener('dragover',event=>{event.preventDefault();event.stopPropagation();zone.classList.add('dragover')});
+        zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
+        zone.addEventListener('drop',event=>{event.preventDefault();event.stopPropagation();zone.classList.remove('dragover');loadBoxGroupFiles(index,event.dataTransfer.files)});
+    });
+}
+async function loadBoxGroupFiles(index,files) {
+    const group=boxGroups[index]; if(!group) return;
+    const incoming=Array.from(files),selected=incoming.filter(file=>/\.(txt|bin)$/i.test(file.name));
+    if(!selected.length) { alert('请选择 TXT 或 CHI LSV BIN 文件。'); return; }
+    const area=Number(document.getElementById('box-area').value);
+    if(!(area>0)) { alert('面积必须大于 0。'); return; }
+    const existing=new Set(group.files.map(file=>`${file.name}:${file.size}`)),seen=new Set();
+    let duplicates=0,skipped=incoming.length-selected.length;
+    selected.forEach(file=>{const key=`${file.name}:${file.size}`;if(existing.has(key)||seen.has(key)) duplicates++;else seen.add(key)});
+    let added=0;
+    for(const file of selected) {
+        const key=`${file.name}:${file.size}`; if(!seen.has(key)) continue; seen.delete(key);
+        try {
+            const parsed=/\.bin$/i.test(file.name)?await parseChiBin(file):await parseTxt(file);
+            const result=getPceFromLists(parsed.v,parsed.i,file.name,false,area);
+            if(result) { group.files.push(file); group.curves.push({name:file.name,v:parsed.v,i:parsed.i}); group.results.push(result); added++; }
+            else skipped++;
+        } catch(error) { skipped++; }
+    }
+    if(!added && !group.results.length) { alert('所选文件中没有可用于计算的 J–V 数据。'); return; }
+    renderBoxGroups(); renderBoxPlot();
+    if(skipped||duplicates) showToast(`导入完成：新增 ${added} 个，跳过无效文件 ${skipped} 个，重复文件 ${duplicates} 个。`);
+}
+function recalculateBoxGroups() {
+    const input=document.getElementById('box-area'),area=Number(input.value);
+    if(!(area>0)) { alert('面积必须大于 0。'); input.value='0.07065'; return; }
+    boxGroups.forEach(group=>group.results=group.curves.map(curve=>getPceFromLists(curve.v,curve.i,curve.name,false,area)).filter(Boolean));
+    renderBoxGroups(); renderBoxPlot();
+}
+function boxPercentile(values,percent) {
+    const sorted=[...values].sort((a,b)=>a-b),position=(sorted.length-1)*percent,lower=Math.floor(position),fraction=position-lower;
+    return sorted[lower]+(sorted[Math.min(lower+1,sorted.length-1)]-sorted[lower])*fraction;
+}
+function boxJitter(groupIndex,pointIndex) {
+    const pseudo=Math.abs(Math.sin((groupIndex+1)*997+(pointIndex+1)*37)*10000)%1;
+    return groupIndex+1-.23+pseudo*.29;
+}
+function boxFill(color) {
+    const value=color.replace('#',''); return `rgba(${parseInt(value.slice(0,2),16)},${parseInt(value.slice(2,4),16)},${parseInt(value.slice(4,6),16)},0.60)`;
+}
+function renderBoxPlot() {
+    const populated=boxGroups.filter(group=>group.results.length);
+    const result=document.getElementById('result-9'),empty=document.getElementById('box-empty');
+    if(!populated.length) { result.style.display='none'; empty.style.display='block'; return; }
+    result.style.display='block'; empty.style.display='none';
+    const colors=['#a7a7a7','#3e9dd5','#f0a53c','#f04b55','#65b96e','#8d79cf'];
+    const metrics=[{key:'Voc (V)',title:'VOC (V)',axis:''},{key:'Jsc (mA/cm²)',title:'JSC (mA cm⁻²)',axis:'2'},{key:'FF',title:'FF',axis:'3'},{key:'PCE (%)',title:'PCE (%)',axis:'4'}],traces=[],shapes=[],ranges=[];
+    metrics.forEach(metric=>{
+        const allValues=[];
+        populated.forEach((group,index)=>{
+            const values=group.results.map(row=>Number(row[metric.key])).filter(Number.isFinite),color=colors[index%colors.length],center=index+1,axis=metric.axis,axes=axis?{xaxis:`x${axis}`,yaxis:`y${axis}`} : {},xref=axis?`x${axis}`:'x',yref=axis?`y${axis}`:'y';
+            if(!values.length) return;
+            allValues.push(...values);
+            const q1=boxPercentile(values,.25),median=boxPercentile(values,.5),q3=boxPercentile(values,.75),low=Math.min(...values),high=Math.max(...values),line={color,width:.9};
+            shapes.push({type:'rect',xref,yref,x0:center-.25,x1:center+.12,y0:q1,y1:q3,fillcolor:boxFill(color),line},
+                {type:'line',xref,yref,x0:center-.25,x1:center+.12,y0:median,y1:median,line:{color,width:1.4}},
+                {type:'line',xref,yref,x0:center-.07,x1:center-.07,y0:low,y1:q1,line},
+                {type:'line',xref,yref,x0:center-.07,x1:center-.07,y0:q3,y1:high,line},
+                {type:'line',xref,yref,x0:center-.17,x1:center+.03,y0:low,y1:low,line},
+                {type:'line',xref,yref,x0:center-.17,x1:center+.03,y0:high,y1:high,line});
+            traces.push({type:'scatter',mode:'markers',x:values.map((_,pointIndex)=>boxJitter(index,pointIndex)),y:values,...axes,name:group.name,marker:{color,size:6,line:{color:'#fff',width:.5}},hovertemplate:`${escapeHTML(group.name)}<br>${metric.key}: %{y:.5g}<extra></extra>`,showlegend:false});
+        });
+        const minimum=Math.min(...allValues),maximum=Math.max(...allValues),spread=maximum-minimum||Math.max(Math.abs(maximum)*.08,.01); ranges.push([minimum-spread*.12,maximum+spread*.13]);
+    });
+    const tickvals=populated.map((_,index)=>index+1),ticktext=populated.map(group=>group.name);
+    const axis=(title,anchor,range)=>({title:{text:title,standoff:7,font:{size:12,color:'#111'}},anchor,range,showline:true,mirror:true,linecolor:'#111',linewidth:1,showgrid:false,zeroline:false,ticks:'outside',tickcolor:'#111',ticklen:4,tickwidth:1,tickfont:{size:10,color:'#111'}}),xaxis=anchor=>({anchor,range:[.55,populated.length+.55],tickvals,ticktext,showline:true,mirror:true,linecolor:'#111',linewidth:1,showgrid:false,zeroline:false,ticks:'outside',tickcolor:'#111',ticklen:4,tickwidth:1,tickfont:{size:10,color:'#111'}});
+    Plotly.react('plot-9',traces,{paper_bgcolor:'#fff',plot_bgcolor:'#fff',font:{family:'Arial, Segoe UI, sans-serif',color:'#111',size:11},grid:{rows:2,columns:2,pattern:'independent',roworder:'top to bottom',xgap:.10,ygap:.14},xaxis:xaxis('y'),yaxis:axis('VOC (V)','x',ranges[0]),xaxis2:xaxis('y2'),yaxis2:axis('JSC (mA cm⁻²)','x2',ranges[1]),xaxis3:xaxis('y3'),yaxis3:axis('FF','x3',ranges[2]),xaxis4:xaxis('y4'),yaxis4:axis('PCE (%)','x4',ranges[3]),shapes,hovermode:'closest',margin:{l:68,r:18,t:16,b:46}},{responsive:true,displaylogo:false,displayModeBar:false,scrollZoom:false});
+}
+async function exportBoxPlot(format='png') {
+    if(!boxGroups.some(group=>group.results.length)) { alert('请先导入有效数据。'); return; }
+    await exportPlot('plot-9','Statistical_Box_Plot',format,1600,680);
+}
+async function exportBoxData() {
+    const rows=[['组名','文件名','面积 (cm²)','Voc (V)','Jsc (mA/cm²)','FF','PCE (%)']];
+    boxGroups.forEach(group=>group.results.forEach(result=>rows.push([group.name,result['文件名'],result['面积 (cm²)'],result['Voc (V)'],result['Jsc (mA/cm²)'],result['FF'],result['PCE (%)']])));
+    if(rows.length===1) { alert('请先导入有效数据。'); return; }
+    const workbook=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),'Results');
+    appendMethodSheet(workbook,'J-V statistical box plot',{device_area_cm2:document.getElementById('box-area').value,whiskers:'minimum and maximum',quartiles:'linear interpolation'},boxGroups.flatMap(group=>group.files.map(file=>file.name)));
+    const response=await window.pywebview.api.save_excel_python('Statistical_Box_Data.xlsx',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+    if(response==='success') showToast('统计数据已导出。'); else if(response?.startsWith('error:')) alert('导出失败：'+response.slice(6));
+}
+function exportPCE() {
+    let csv = "\uFEFF" + Object.keys(pceDataCache[0]).join(",") + "\n" + pceDataCache.map(row => Object.values(row).join(",")).join("\n");
+    let blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); let link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "PCE_Results.csv"; link.click();
+}
+async function processExtract(files) {
+    if(files.length === 0) return; currentExtFiles = files; 
+    let skip = parseInt(document.getElementById('ext-skip').value) || 0; let cols = document.getElementById('ext-cols').value.trim().split(/\s+/).map(Number);
+    let doAbs = document.getElementById('ext-do-abs').checked; let absCols = document.getElementById('ext-abs-col').value.trim().split(/\s+/).map(Number);
+    let doJv = document.getElementById('ext-do-jv').checked; let area = parseFloat(document.getElementById('ext-area').value);
+    let doMath = document.getElementById('ext-do-math').checked; let op = document.getElementById('ext-op').value; let val = parseFloat(document.getElementById('ext-val').value) || 1.0;
+    let addBlank = document.getElementById('ext-blank').checked; let allHeaders = []; let allColData = []; let maxRows = 0;
+    for(let f of files) {
+        let fName = f.name.replace(/\.[^/.]+$/, ""); let cData = []; let hdrs = [];
+        if(f.name.endsWith('.bin')) {
+            let res = await parseChiBin(f); let jList = res.i.map(i => { let v = i; if(doAbs && absCols.includes(2)) v = Math.abs(v); if(doJv) v = v * 1000 / area; return v; });
+            cData = [res.v, jList]; hdrs = [`${fName}_V`, `${fName}_J`];
+        } else {
+            let res = await parseTxt(f); let lines = res.raw.split('\n').slice(skip); cData = Array(cols.length).fill().map(()=>[]); hdrs = cols.map(c => `${fName}_C${c}`);
+            for(let line of lines) {
+                let parts = line.trim().split(/\s+/); if(parts.length < 1) continue;
+                for(let k=0; k<cols.length; k++) {
+                    let colIdx = cols[k]; if(parts.length >= colIdx) {
+                        let num = parseFloat(parts[colIdx-1].replace(/,/g, ''));
+                        if(!isNaN(num)) { if(doJv && colIdx === 2) num = num * 1000 / area; if(doAbs && absCols.includes(colIdx)) num = Math.abs(num); cData[k].push(num);
+                        } else { cData[k].push(parts[colIdx-1]); }
+                    } else { cData[k].push(""); }
+                }
+            }
+        }
+        if(doMath && cData.length >= 2) { cData[1] = cData[1].map(v => { if(typeof v !== 'number') return v; if(op==='+') return v+val; if(op==='-') return v-val; if(op==='×') return v*val; if(op==='÷' && val!==0) return v/val; return v; }); }
+        if(addBlank) { cData.push([]); hdrs.push(`${fName}_BLANK`); }
+        cData.forEach(col => { if(col.length > maxRows) maxRows = col.length; }); allHeaders.push(...hdrs); allColData.push(...cData);
+    }
+    extAoaCache = [allHeaders]; for(let r=0; r<maxRows; r++) { let row = []; for(let col of allColData) { row.push(col[r] !== undefined ? col[r] : ""); } extAoaCache.push(row); }
+    document.getElementById('result-2').style.display = 'block'; let html = `<tr>${allHeaders.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+    for(let r=1; r<Math.min(51, extAoaCache.length); r++) { html += `<tr>${extAoaCache[r].map(v=>`<td>${v}</td>`).join('')}</tr>`; }
+    document.getElementById('table-2').innerHTML = html;
+}
+function exportExt() { const ws = XLSX.utils.aoa_to_sheet(extAoaCache); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, "Extracted_Data.xlsx"); }
+async function readTRPLFile(file) {
+    let rows;
+    if (/\.xlsx?$/i.test(file.name)) {
+        const workbook = XLSX.read(await file.arrayBuffer(), {type:'array'});
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header:1, raw:true});
+    } else {
+        rows = (await file.text()).split(/\r?\n/).map(line => line.trim().split(/[\s,;\t]+/));
+    }
+    const pairs = rows.map(row => row.map(Number).filter(Number.isFinite)).filter(row => row.length >= 2);
+    if (pairs.length < 6) throw new Error("未找到足够的两列数值数据。");
+    return {x:pairs.map(row => row[0]), y:pairs.map(row => row[1])};
+}
+function fitNumber(value, digits=6) {
+    if (value === null || !Number.isFinite(Number(value))) return "—";
+    return Number(value).toPrecision(digits);
+}
+async function processTRPL(files, remember=true) {
+    if (!files.length) return;
+    if (remember) currentTRPLFiles = Array.from(files);
+    files = currentTRPLFiles;
+    const runId = ++trplRunId;
+    const model = document.getElementById('fit-model').value;
+    trplResults = [];
+    document.getElementById('upload-row-4').style.display = 'none';
+    document.getElementById('result-4').style.display = 'block';
+    document.getElementById('fit-progress').textContent = `正在处理 0 / ${files.length}`;
+    for (let index = 0; index < files.length; index++) {
+        if (runId !== trplRunId) return;
+        const file = files[index];
+        document.getElementById('fit-progress').textContent = `正在处理 ${index + 1} / ${files.length}：${file.name}`;
+        try {
+            const raw = await readTRPLFile(file);
+            const response = await window.pywebview.api.fit_trpl_python(raw.x, raw.y, model);
+            if (runId !== trplRunId) return;
+            if (!response || response.status !== 'success') throw new Error(response?.message || '拟合失败');
+            trplResults.push({name:file.name, raw, model, status:'success', result:response.result});
+        } catch (error) {
+            trplResults.push({name:file.name, model, status:'error', error:String(error.message || error)});
+        }
+    }
+    const successCount = trplResults.filter(item => item.status === 'success').length;
+    document.getElementById('fit-progress').textContent = `已完成 ${files.length} 个文件：${successCount} 成功，${files.length-successCount} 失败`;
+    selectedTRPL = Math.max(0, trplResults.findIndex(item => item.status === 'success'));
+    trplView = 'all';
+    refreshTRPLUI();
+}
+function setTRPLView(view) {
+    trplView = view;
+    document.getElementById('fit-view-all').classList.toggle('active', view === 'all');
+    document.getElementById('fit-view-one').classList.toggle('active', view === 'one');
+    renderTRPLPlot();
+}
+function selectTRPLSample(value) {
+    selectedTRPL = Number(value);
+    renderTRPLMetrics();
+    if (trplView === 'one') renderTRPLPlot();
+}
+function refreshTRPLUI() {
+    const selector = document.getElementById('fit-sample');
+    selector.innerHTML = trplResults.map((item,index) => `<option value="${index}">${escapeHTML(item.name)}${item.status === 'error' ? ' — 失败' : ''}</option>`).join('');
+    selector.value = String(selectedTRPL);
+    document.getElementById('fit-result-count').textContent = `${trplResults.length} 个文件`;
+    document.getElementById('fit-view-all').classList.add('active');
+    document.getElementById('fit-view-one').classList.remove('active');
+    renderTRPLPlot(); renderTRPLMetrics(); renderTRPLTable();
+}
+function renderTRPLPlot() {
+    const palette = ['#087ef1','#0f9d8a','#e85d3f','#8b5cf6','#d97706','#db2777','#0891b2','#65a30d','#475569','#dc2626'];
+    const visible = trplView === 'one' ? [trplResults[selectedTRPL]].filter(item => item?.status === 'success') : trplResults.filter(item => item.status === 'success');
+    const traces = [];
+    visible.forEach(item => {
+        const sampleIndex = trplResults.indexOf(item), group = `sample-${sampleIndex}`;
+        const result = item.result, color = palette[sampleIndex % palette.length];
+        const scale = result.y.reduce((peak,value) => value > peak ? value : peak, 0);
+        const points = result.x.map((x,index) => result.y[index] > 0 ? [x,Math.log10(result.y[index]/scale)] : null).filter(Boolean);
+        const fitted = result.x.map((x,index) => result.fitted[index] > 0 ? [x,Math.log10(result.fitted[index]/scale)] : null).filter(Boolean);
+        traces.push(
+            {x:points.map(p=>p[0]),y:points.map(p=>p[1]),mode:'markers',name:item.name,legendgroup:group,marker:{size:5,color,opacity:.55},xaxis:'x',yaxis:'y'},
+            {x:fitted.map(p=>p[0]),y:fitted.map(p=>p[1]),mode:'lines',name:`${item.name} fit`,legendgroup:group,showlegend:false,line:{width:2.3,color},xaxis:'x',yaxis:'y'},
+            {x:result.x,y:result.y.map((y,index)=>(y-result.fitted[index])/scale),mode:'markers',name:`${item.name} residual`,legendgroup:group,showlegend:false,marker:{size:4,color,opacity:.7},xaxis:'x2',yaxis:'y2'}
+        );
+    });
+    Plotly.react('plot-4', traces, {
+        paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',color:'#52606d',size:12},
+        xaxis:{domain:[0,1],anchor:'y',showticklabels:false,gridcolor:'#edf1f3'},yaxis:{domain:[.34,1],title:'log10(I/Imax)',gridcolor:'#edf1f3'},
+        xaxis2:{domain:[0,1],anchor:'y2',title:'Time after peak',gridcolor:'#edf1f3'},yaxis2:{domain:[0,.22],title:'Normalized residual',zeroline:true,zerolinecolor:'#94a3b8',gridcolor:'#edf1f3'},
+        legend:{orientation:'h',x:0,y:1.12,groupclick:'togglegroup'},margin:{l:82,r:24,t:58,b:55},hovermode:'closest'
+    }, {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+function renderTRPLMetrics() {
+    const item = trplResults[selectedTRPL], result = item?.status === 'success' ? item.result : null;
+    const triple = result?.model === 'expdec3';
+    document.getElementById('fit-middle-card').style.display = triple ? 'block' : 'none';
+    document.getElementById('fit-tau').innerHTML = result ? `${fitNumber(result.tau_avg,5)} <small>± ${fitNumber(result.tau_error,3)}</small>` : '—';
+    document.getElementById('fit-r2').textContent = result ? fitNumber(result.r_squared,7) : '—';
+    document.getElementById('fit-fast').innerHTML = result ? `${(result.fast_fraction*100).toFixed(2)} <small>%</small>` : '—';
+    document.getElementById('fit-middle').innerHTML = triple ? `${(result.middle_fraction*100).toFixed(2)} <small>%</small>` : '—';
+    document.getElementById('fit-slow').innerHTML = result ? `${(result.slow_fraction*100).toFixed(2)} <small>%</small>` : '—';
+}
+function parameterValue(result, name, field='value') { return result.parameters.find(item => item.name === name)?.[field] ?? null; }
+function renderTRPLTable() {
+    const triple = trplResults.some(item => item.result?.model === 'expdec3');
+    const headers = ['文件','模型','τavg','y0','A1','t1','A2','t2',...(triple?['A3','t3']:[]),'快组分',...(triple?['中组分']:[]),'慢组分','R²','调整 R²','约化卡方','RSS','点数','状态'];
+    const rows = trplResults.map(item => {
+        if (item.status === 'error') return [item.name,item.model === 'expdec3'?'ExpDec3':'ExpDec2',...Array(headers.length-3).fill('—'),`失败：${item.error}`];
+        const r = item.result, pair = name => `${fitNumber(parameterValue(r,name),7)} ± ${fitNumber(parameterValue(r,name,'error'),3)}`;
+        return [item.name,r.model === 'expdec3'?'ExpDec3':'ExpDec2',`${fitNumber(r.tau_avg,7)} ± ${fitNumber(r.tau_error,3)}`,pair('y0'),pair('A1'),pair('t1'),pair('A2'),pair('t2'),
+            ...(triple?[pair('A3'),pair('t3')]:[]),`${(r.fast_fraction*100).toFixed(3)}%`,...(triple?[r.middle_fraction===null?'—':`${(r.middle_fraction*100).toFixed(3)}%`]:[]),
+            `${(r.slow_fraction*100).toFixed(3)}%`,fitNumber(r.r_squared,8),fitNumber(r.adjusted_r_squared,8),fitNumber(r.reduced_chi_squared,7),fitNumber(r.rss,7),r.points,'成功'];
+    });
+    document.getElementById('table-4').innerHTML = `<tr>${headers.map(value=>`<th>${value}</th>`).join('')}</tr>` + rows.map(row=>`<tr>${row.map(value=>`<td>${escapeHTML(String(value))}</td>`).join('')}</tr>`).join('');
+}
+function escapeHTML(value) { const element = document.createElement('div'); element.textContent = value; return element.innerHTML; }
+function safeSheetName(name, used) {
+    const base = (name.replace(/[\\/?*\[\]:]/g,'_').replace(/\.[^/.]+$/,'').trim() || 'Data').slice(0,31);
+    let candidate = base, suffix = 2;
+    while (used.has(candidate.toLowerCase())) { const tail = `_${suffix++}`; candidate = base.slice(0,31-tail.length) + tail; }
+    used.add(candidate.toLowerCase()); return candidate;
+}
+console.assert(safeSheetName('a/b.xlsx', new Set()) === 'a_b');
+async function exportTRPL() {
+    if (!trplResults.length) return;
+    const summaryHeader = ['file','model','status','error','tau_avg','tau_error','y0','y0_error','A1','A1_error','t1','t1_error','A2','A2_error','t2','t2_error','A3','A3_error','t3','t3_error','fast_fraction','middle_fraction','slow_fraction','R_squared','adjusted_R_squared','reduced_chi_squared','RSS','points'];
+    const summary = [summaryHeader,...trplResults.map(item => {
+        if (item.status === 'error') return [item.name,item.model,'error',item.error];
+        const r = item.result, values = name => [parameterValue(r,name),parameterValue(r,name,'error')];
+        return [item.name,r.model,'success','',r.tau_avg,r.tau_error,...values('y0'),...values('A1'),...values('t1'),...values('A2'),...values('t2'),...values('A3'),...values('t3'),r.fast_fraction,r.middle_fraction,r.slow_fraction,r.r_squared,r.adjusted_r_squared,r.reduced_chi_squared,r.rss,r.points];
+    })];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(summary),'Summary');
+    const used = new Set(['summary']);
+    trplResults.filter(item=>item.status === 'success').forEach(item => {
+        const raw = item.raw, r = item.result, length = Math.max(raw.x.length,r.x.length), rows = [['original_time','original_intensity','fit_time_after_peak','fit_intensity','fitted_intensity','residual']];
+        for (let index=0; index<length; index++) rows.push([raw.x[index]??'',raw.y[index]??'',r.x[index]??'',r.y[index]??'',r.fitted[index]??'',r.y[index]===undefined?'':r.y[index]-r.fitted[index]]);
+        XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),safeSheetName(item.name,used));
+    });
+    appendMethodSheet(workbook,'TRPL',{model:document.getElementById('fit-model').value,time_origin:'intensity peak set to zero',tau_avg:'integral average lifetime'},trplResults.map(item=>item.name));
+    const base64Data = XLSX.write(workbook,{bookType:'xlsx',type:'base64'});
+    const response = await window.pywebview.api.save_excel_python('TRPL_Batch_Results.xlsx',base64Data);
+    if (response === 'success') showToast('全部 TRPL 结果已导出。');
+    else if (response && response.startsWith('error:')) alert('导出失败：' + response.slice(6));
+}
+async function previewRename() {
+    const mode = document.querySelector('input[name="rename_type"]:checked').value;
+    const prefix = document.getElementById('rename-prefix').value.trim();
+    const status = document.getElementById('rename-status');
+    if (!prefix && mode === '1') { status.textContent='请输入前缀。'; return; }
+    try {
+        const result = await window.pywebview.api.preview_rename_python(mode,prefix);
+        if (result?.status === 'cancelled') { status.textContent='已取消选择。'; return; }
+        if (result?.status !== 'success') throw new Error(result?.message || '无法生成预览');
+        const conflicts = result.conflicts || [], operations = result.operations || [];
+        document.getElementById('rename-folder').textContent=`文件夹：${result.folder}（${operations.length} 个文件）`;
+        document.getElementById('rename-warning').textContent=conflicts.length ? `发现 ${conflicts.length} 个名称冲突，不能执行。请处理冲突后重新预览：${conflicts.join('、')}` : '确认后才会写入磁盘；执行失败时会自动回滚本次已完成的文件。';
+        document.getElementById('rename-preview-table').innerHTML='<tr><th>原文件名</th><th>新文件名</th></tr>'+operations.map(item=>`<tr><td>${escapeHTML(item.old)}</td><td>${escapeHTML(item.new)}</td></tr>`).join('');
+        document.getElementById('rename-confirm').disabled=Boolean(conflicts.length)||!operations.length;
+        document.getElementById('rename-dialog').showModal();
+    } catch(error) { status.textContent=`预览失败：${error.message || error}`; }
+}
+function closeRenamePreview() { document.getElementById('rename-dialog').close(); }
+async function confirmRename() {
+    const status=document.getElementById('rename-status'),button=document.getElementById('rename-confirm');
+    button.disabled=true;
+    try {
+        const result=await window.pywebview.api.execute_rename_python();
+        if(result?.status!=='success') throw new Error(result?.message||'重命名失败');
+        closeRenamePreview(); status.textContent=`重命名完成：${result.count} 个文件。可使用“撤销上一次重命名”恢复。`; showToast(status.textContent);
+    } catch(error) { status.textContent=`重命名失败：${error.message||error}`; button.disabled=false; }
+}
+async function undoRename() {
+    const status=document.getElementById('rename-status');
+    try {
+        const result=await window.pywebview.api.undo_rename_python();
+        if(result?.status!=='success') throw new Error(result?.message||'撤销失败');
+        status.textContent=`已撤销上一次重命名：${result.count} 个文件。`; showToast(status.textContent);
+    } catch(error) { status.textContent=`撤销失败：${error.message||error}`; }
+}
+// 🚀 替换为呼叫 Python 的 CSV 导出
+async function exportPCE() {
+    if (!pceDataCache || pceDataCache.length === 0) return;
+    
+    // 生成 CSV 纯文本内容
+    let csv = Object.keys(pceDataCache[0]).join(",") + "\n" + 
+              pceDataCache.map(row => Object.values(row).join(",")).join("\n");
+              
+    try {
+        let res = await window.pywebview.api.save_csv_python("PCE_Results.csv", csv);
+        if (res === "success") showToast("CSV 已导出。");
+        else if (res.startsWith("error:")) alert("导出失败：" + res);
+    } catch (e) { alert("环境错误：未能连接到底层 Python 引擎。"); }
+}
+
+// 🚀 替换为呼叫 Python 的 Excel 导出
+async function exportExt() {
+    if (!extAoaCache || extAoaCache.length === 0) return;
+    
+    // 使用 SheetJS 生成工作簿
+    const ws = XLSX.utils.aoa_to_sheet(extAoaCache); 
+    const wb = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); 
+    
+    // 将工作簿打包成 Base64 编码的字符串（不触发浏览器下载）
+    const base64Data = XLSX.write(wb, {bookType: 'xlsx', type: 'base64'});
+    
+    try {
+        // 呼叫 Python，传出 Base64 数据
+        let res = await window.pywebview.api.save_excel_python("Extracted_Data.xlsx", base64Data);
+        if (res === "success") showToast("Excel 矩阵已导出。");
+        else if (res.startsWith("error:")) alert("导出失败：" + res);
+    } catch (e) { alert("环境错误：未能连接到底层 Python 引擎。"); }
+}
+
+function loadUPSFiles(files) {
+    const accepted = Array.from(files).filter(file => /\.xlsx?$/i.test(file.name));
+    if (!accepted.length) { alert('请选择 .xls 或 .xlsx 文件。'); return; }
+    const keys = new Set(upsFiles.map(file => `${file.name}:${file.size}`));
+    accepted.forEach(file => { const key = `${file.name}:${file.size}`; if (!keys.has(key)) { upsFiles.push(file); keys.add(key); } });
+    document.getElementById('result-7').style.display = 'block';
+    document.getElementById('upload-row-7').style.display = 'none';
+    if (!upsSamples.length) addUPSSample(); else renderUPSPairs();
+    document.getElementById('ups-status').textContent = `已导入 ${upsFiles.length} 个 Excel 文件，请手动完成 0 V / −5 V 配对。`;
+}
+function addUPSSample() {
+    upsSamples.push({name:`Sample ${upsSamples.length + 1}`,cutoffFile:'',onsetFile:'',bandgap:1.56,windows:null,fitResult:null,status:'pending',error:'',cutoffShift:0,onsetShift:0,energyErrors:{cutoff:'',onset:'',vbm:'',cbm:'',ef:''},bandgapError:''});
+    renderUPSPairs();
+}
+function updateUPSSample(index, field, value) {
+    const sample = upsSamples[index]; if (!sample) return;
+    if (field === 'bandgap') {
+        const text = value == null ? '' : String(value).trim(), eg = Number(text);
+        let message = '';
+        if (text === '' || !Number.isFinite(eg) || !(eg > 0)) message = 'Eg 必须为正数。';
+        else if (sample.fitResult) {
+            const current = upsCurrentLevels(sample), candidate = {...current,cbm:current.vbm+eg};
+            message = upsLevelError(candidate);
+        }
+        if (message) { sample.bandgapError = message; renderUPSPairs(); return; }
+        sample.bandgapError = '';
+        sample.bandgap = eg;
+        renderUPSPairs();
+        if (sample.fitResult) renderUPSResults();
+        return;
+    }
+    sample[field] = value;
+    if (field === 'cutoffFile' || field === 'onsetFile') {
+        clearUPSErrors(sample);
+        sample.cutoffShift = 0;
+        sample.onsetShift = 0;
+        if (sample.fitResult) { sample.fitResult=null; sample.status='pending'; renderUPSResults(); }
+        renderUPSPairs();
+    }
+    if (field === 'name' && sample.fitResult) renderUPSResults();
+}
+function removeUPSSample(index) { upsSamples.splice(index,1); renderUPSPairs(); renderUPSResults(); }
+function renderUPSPairs() {
+    const options = '<option value="">请选择文件</option>' + upsFiles.map((file,index)=>`<option value="${index}">${escapeHTML(file.name)}</option>`).join('');
+    document.getElementById('ups-pairs').innerHTML = upsSamples.map((sample,index)=>`<div class="ups-pair-grid">
+        <div><span class="control-label">样品名称</span><input type="text" value="${escapeHTML(sample.name)}" oninput="updateUPSSample(${index},'name',this.value)"></div>
+        <div><span class="control-label">0 V 文件</span><select onchange="updateUPSSample(${index},'onsetFile',this.value)">${options}</select></div>
+        <div><span class="control-label">−5 V 文件</span><select onchange="updateUPSSample(${index},'cutoffFile',this.value)">${options}</select></div>
+        <div><span class="control-label">Eg (eV)</span><input type="number" min="0.01" step="0.01" value="${sample.bandgap}" onchange="updateUPSSample(${index},'bandgap',this.value)"><span class="ups-error" data-ups-error="bandgap">${escapeHTML(sample.bandgapError||'')}</span></div>
+        <button class="toolbar-btn" title="删除样品" onclick="removeUPSSample(${index})">×</button>
+        ${sample.error?`<div class="ups-error" style="grid-column:1/-1">${escapeHTML(sample.error)}</div>`:''}
+    </div>`).join('');
+    upsSamples.forEach((sample,index)=>{
+        const selects = document.querySelectorAll('#ups-pairs .ups-pair-grid')[index]?.querySelectorAll('select');
+        if (selects) { selects[0].value = sample.onsetFile; selects[1].value = sample.cutoffFile; }
+    });
+}
+async function readUPSSpectrum(file) {
+    const workbook = XLSX.read(await file.arrayBuffer(), {type:'array'});
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header:1,raw:true,defval:null});
+    const width = Math.max(0,...rows.map(row=>row.length));
+    const isNumeric=value=>value!==null&&value!==''&&Number.isFinite(Number(value));
+    const candidates = Array.from({length:width},(_,column)=>({column,count:rows.reduce((sum,row)=>sum+(isNumeric(row[column])?1:0),0)})).sort((a,b)=>b.count-a.count).slice(0,2).sort((a,b)=>a.column-b.column);
+    if (candidates.length < 2 || candidates[1].count < 12) throw new Error('未找到两列足够的数值型 UPS 数据。');
+    const pairs = rows.filter(row=>isNumeric(row[candidates[0].column])&&isNumeric(row[candidates[1].column])).map(row=>[Number(row[candidates[0].column]),Number(row[candidates[1].column])]);
+    if (pairs.length < 12) throw new Error('有效 UPS 数据点不足。');
+    return {x:pairs.map(row=>row[0]),y:pairs.map(row=>row[1])};
+}
+function validateUPSPairs() {
+    const used = new Set();
+    for (const sample of upsSamples) {
+        if (!sample.name.trim() || sample.onsetFile === '' || sample.cutoffFile === '') return '每个样品都需要名称、0 V 文件和 −5 V 文件。';
+        if (!(sample.bandgap > 0)) return `${sample.name} 的 Eg 必须大于 0。`;
+        for (const value of [sample.onsetFile,sample.cutoffFile]) { if (used.has(value)) return '同一个文件不能重复分配给多个数据位置。'; used.add(value); }
+    }
+    return upsSamples.length ? '' : '请至少添加一个样品。';
+}
+function upsSmoothingSettings() {
+    const error = document.getElementById('ups-smooth-error');
+    const enabled = document.getElementById('ups-smooth')?.checked !== false;
+    if (!enabled) { if (error) error.textContent = ''; return {window:0,order:0}; }
+    const window = Number(document.getElementById('ups-smooth-window')?.value);
+    const order = Number(document.getElementById('ups-smooth-order')?.value);
+    if (!Number.isInteger(window) || window < 3 || window % 2 === 0) { if (error) error.textContent = '窗口点数必须是 ≥ 3 的奇数。'; return null; }
+    if (!Number.isInteger(order) || order < 0 || order >= window) { if (error) error.textContent = '多项式阶数必须 ≥ 0 且小于窗口点数。'; return null; }
+    if (error) error.textContent = '';
+    return {window, order};
+}
+function upsSmoothingLabel(settings) { return settings.window ? `SavGol ${settings.order} 阶 / ${settings.window} 点` : '未平滑'; }
+function applyUPSSmoothing() {
+    if (upsSmoothingSettings() === null) return;
+    if (upsSamples.some(sample => sample.status === 'success' && sample.fitResult)) processUPSSamples();
+}
+async function processUPSSamples() {
+    const validation = validateUPSPairs(); if (validation) { document.getElementById('ups-status').textContent = validation; return; }
+    const smoothing = upsSmoothingSettings(); if (!smoothing) { document.getElementById('ups-status').textContent = '平滑参数无效，请检查窗口点数与多项式阶数。'; return; }
+    const runId = ++upsRunId; document.getElementById('ups-status').textContent = '正在读取和拟合 UPS 数据…';
+    for (let index=0; index<upsSamples.length; index++) {
+        if (runId !== upsRunId) return;
+        const sample = upsSamples[index]; sample.error=''; sample.status='running'; sample.cutoffShift=0; sample.onsetShift=0; clearUPSErrors(sample);
+        try {
+            sample.onsetRaw = await readUPSSpectrum(upsFiles[Number(sample.onsetFile)]);
+            sample.cutoffRaw = await readUPSSpectrum(upsFiles[Number(sample.cutoffFile)]);
+            const response = await window.pywebview.api.fit_ups_python(sample.cutoffRaw.x,sample.cutoffRaw.y,sample.onsetRaw.x,sample.onsetRaw.y,null,null,smoothing.window,smoothing.order);
+            if (!response || response.status !== 'success') throw new Error(response?.message || 'UPS 拟合失败');
+            sample.fitResult=response.result; sample.intersections=null; sample.manualLines=null; sample.windows={cutoff:response.result.cutoff.window,onset:response.result.onset.window}; sample.status='success';
+        } catch(error) { sample.status='error'; sample.error=String(error.message||error); sample.fitResult=null; }
+    }
+    renderUPSPairs(); renderUPSResults();
+    const success=upsSamples.filter(sample=>sample.status==='success').length;
+    document.getElementById('ups-status').textContent=`已处理 ${upsSamples.length} 个样品：${success} 成功，${upsSamples.length-success} 失败（${upsSmoothingLabel(smoothing)}）。`;
+}
+function upsValue(value,digits=2) { return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—'; }
+function upsLevels(sample) { const cutoff=sample.intersections?.cutoff??sample.fitResult.cutoff_eV,onset=sample.intersections?.onset??sample.fitResult.onset_eV,workFunction=21.22-cutoff,vbm=-(workFunction+onset);return {cutoff,onset,workFunction,vbm,cbm:vbm+sample.bandgap,ef:-workFunction}; }
+function upsCurveShift(sample,key) { const raw=key==='cutoff'?sample?.cutoffShift:sample?.onsetShift;return Number.isFinite(raw)?raw:0; }
+function upsCurrentLevels(sample) {
+    const base=upsLevels(sample),cutoffShift=upsCurveShift(sample,'cutoff'),onsetShift=upsCurveShift(sample,'onset');
+    const cutoff=base.cutoff+cutoffShift,onset=base.onset+onsetShift,workFunction=21.22-cutoff,vbm=-(workFunction+onset);
+    return {...base,cutoff,onset,workFunction,vbm,cbm:vbm+sample.bandgap,ef:-workFunction,cutoffShift,onsetShift,baseCutoff:base.cutoff,baseOnset:base.onset,baseWorkFunction:base.workFunction,baseVbm:base.vbm,baseCbm:base.cbm,baseEf:base.ef};
+}
+function upsLevelError(levels) { if(!levels)return '能级无效。';const values=[levels.vbm,levels.cbm,levels.ef];if(!values.every(Number.isFinite))return '能级无效。';if(values.some(value=>value>=0))return '能级必须为负值。';if(!(levels.cbm>levels.vbm))return 'CBM 必须大于 VBM。';if(levels.ef<levels.vbm||levels.ef>levels.cbm)return 'EF 应位于带隙内。';return ''; }
+function upsValidDiagramLevels(levels) { return upsLevelError(levels)===''; }
+function clearUPSLevelErrors(sample) { if(!sample)return;sample.energyErrors={cutoff:'',onset:'',vbm:'',cbm:'',ef:''}; }
+function clearUPSErrors(sample) { if(!sample)return;clearUPSLevelErrors(sample);sample.bandgapError=''; }
+function setUPSError(sample,field,message) { if(!sample)return;if(field==='bandgap')sample.bandgapError=message;else sample.energyErrors={...(sample.energyErrors||{}),[field]:message}; }
+function updateUPSEnergyLevel(index,field,value) {
+    const sample=upsSamples[index];
+    if(!sample||!sample.fitResult||!['vbm','cbm','ef'].includes(field))return false;
+    const text=value==null?'':String(value).trim(),numeric=Number(text),current=upsCurrentLevels(sample);
+    if(text===''||!Number.isFinite(numeric)){setUPSError(sample,field,'请输入有效数值。');renderUPSResults();return false;}
+    if(numeric===Number(current[field].toFixed(2))&&numeric<0){clearUPSLevelErrors(sample);renderUPSResults();return true;}
+    const delta=numeric-current[field],candidate={vbm:current.vbm+delta,cbm:current.cbm+delta,ef:current.ef+delta};
+    const message=upsLevelError(candidate);
+    if(message){setUPSError(sample,field,message);renderUPSResults();return false;}
+    clearUPSLevelErrors(sample);
+    sample.cutoffShift=current.cutoffShift+delta;
+    sample.onsetShift=current.onsetShift;
+    renderUPSResults();
+    return true;
+}
+function updateUPSCurveShift(index,field,value) {
+    const sample=upsSamples[index];
+    if(!sample||!sample.fitResult||!['cutoff','onset'].includes(field))return false;
+    const text=value==null?'':String(value).trim(),numeric=Number(text),current=upsCurrentLevels(sample);
+    if(text===''||!Number.isFinite(numeric)){setUPSError(sample,field,'请输入有效数值。');renderUPSResults();return false;}
+    if(numeric===Number(current[field].toFixed(2))){clearUPSLevelErrors(sample);renderUPSResults();return true;}
+    const base=upsLevels(sample),next={cutoffShift:current.cutoffShift,onsetShift:current.onsetShift};
+    if(field==='cutoff')next.cutoffShift=numeric-base.cutoff;else next.onsetShift=numeric-base.onset;
+    const candidate=upsCurrentLevels({...sample,...next}),message=upsLevelError(candidate);
+    if(message){setUPSError(sample,field,message);renderUPSResults();return false;}
+    clearUPSLevelErrors(sample);
+    sample.cutoffShift=next.cutoffShift;
+    sample.onsetShift=next.onsetShift;
+    renderUPSResults();
+    return true;
+}
+function syncUPSPCBMInputs() { const lumo=document.getElementById('ups-pcbm-lumo'),homo=document.getElementById('ups-pcbm-homo'),error=document.getElementById('ups-pcbm-error');if(lumo)lumo.value=Number(upsPcbmLevels.lumo).toFixed(2);if(homo)homo.value=Number(upsPcbmLevels.homo).toFixed(2);if(error)error.textContent=upsPcbmError; }
+function updateUPSPCBM(field,value) { if(field!=='lumo'&&field!=='homo')return false;const text=value==null?'':String(value).trim(),numeric=Number(text),candidate={...upsPcbmLevels,[field]:numeric};let message='';if(text===''||!Number.isFinite(numeric))message='请输入有效数值。';else if(numeric>=0)message='能级必须为负值。';else if(!(candidate.lumo>candidate.homo))message='LUMO 必须高于 HOMO。';if(message){upsPcbmError=message;syncUPSPCBMInputs();return false;}upsPcbmError='';if(numeric===Number(upsPcbmLevels[field].toFixed(2))&&numeric<0){syncUPSPCBMInputs();renderUPSResults();return true;}upsPcbmLevels=candidate;syncUPSPCBMInputs();renderUPSResults();return true; }
+const UPS_ENERGY_COLORS=['#2876AD','#C84845','#25866C','#D08A2C','#7B5EA7','#4C9F70','#B5527C','#3C8DAD'];
+const UPS_PCBM_COLOR='#6E56A0';
+function upsEnergyWidth(count) { const panels=Math.max(0,Number(count)||0);return Math.max(700,550*panels); }
+function upsSignedOffset(value,digits=2) { const number=Number(value);if(!Number.isFinite(number))return '—';const text=number.toFixed(digits);if(Number(text)===0)return (0).toFixed(digits);return number>0?`+${text}`:text; }
+function upsEnergyFigure(successful) {
+    const samples=Array.isArray(successful)?successful:[],count=samples.length,width=upsEnergyWidth(count),height=540,pLeft=0.28,pRight=1.28,cLeft=1.95,cRight=2.95;
+    const levels=samples.map(sample=>upsCurrentLevels(sample));
+    let yLow=-6.65;
+    levels.forEach(level=>{yLow=Math.min(yLow,level.vbm-0.55,level.cbm-0.55,upsPcbmLevels.homo-0.55);});
+    const yHigh=0.6,labelY=yLow+0.14,traces=[],shapes=[],annotations=[];
+    const tickValues=[];for(let value=0;value>=Math.ceil(yLow);value--)tickValues.push(value);
+    const layout={width,height,paper_bgcolor:'#fff',plot_bgcolor:'#fff',showlegend:false,hovermode:false,
+        font:{family:'Arial, Helvetica, sans-serif',color:'#111',size:12},
+        title:{text:'Perovskite / PCBM energy-level alignment',x:0.5,y:0.98,xanchor:'center',yanchor:'top',font:{size:22,color:'#111'}},
+        margin:{l:82,r:28,t:104,b:86},
+        yaxis:{domain:[0,1],range:[yLow,yHigh],title:{text:'Energy relative to vacuum (eV)',font:{size:13,color:'#111'}},tickmode:'array',tickvals:tickValues,ticktext:tickValues.map(String),tickfont:{size:11,color:'#111'},ticks:'outside',ticklen:4,tickcolor:'#111',showgrid:false,zeroline:false,showline:false,fixedrange:true},
+        shapes,annotations};
+    if(!count)return {traces,layout,width,height};
+    samples.forEach((sample,index)=>{
+        const r=levels[index],color=UPS_ENERGY_COLORS[index%UPS_ENERGY_COLORS.length],axisId=index===0?'x':`x${index+1}`,axisKey=index===0?'xaxis':`xaxis${index+1}`,pad=count===1?0.02:0.015,centerX=(pLeft+pRight)/2,pcbmX=(cLeft+cRight)/2;
+        layout[axisKey]={domain:[index/count+pad,(index+1)/count-pad],range:[0,3.2],anchor:'y',showgrid:false,zeroline:false,showline:false,showticklabels:false,ticks:'',fixedrange:true};
+        traces.push({x:[0.05,3.2],y:[null,null],mode:'markers',marker:{opacity:0,size:1},showlegend:false,hoverinfo:'skip',xaxis:axisId,yaxis:'y'});
+        annotations.push({x:1.6,y:0.5,xref:axisId,yref:'y',text:`${escapeHTML(sample.name)} / PCBM`,showarrow:false,font:{size:15,color:'#111'},xanchor:'center',yanchor:'bottom'});
+        shapes.push({type:'line',x0:0.05,x1:3.15,y0:0,y1:0,xref:axisId,yref:'y',line:{color:'#555',width:1}});
+        annotations.push({x:1.4,y:0.1,xref:axisId,yref:'y',text:'Vacuum level = 0 eV',showarrow:false,font:{size:11,color:'#111'},xanchor:'center',yanchor:'bottom'});
+        shapes.push({type:'line',x0:0.05,x1:0.05,y0:yLow,y1:0.55,xref:axisId,yref:'y',line:{color:'#111',width:1.2}});
+        shapes.push({type:'rect',x0:pLeft,x1:pRight,y0:r.vbm,y1:r.cbm,xref:axisId,yref:'y',fillcolor:color,opacity:0.10,line:{width:0},layer:'below'});
+        shapes.push({type:'line',x0:pLeft,x1:pRight,y0:r.cbm,y1:r.cbm,xref:axisId,yref:'y',line:{color,width:3}},
+            {type:'line',x0:pLeft,x1:pRight,y0:r.vbm,y1:r.vbm,xref:axisId,yref:'y',line:{color,width:3}},
+            {type:'line',x0:pLeft,x1:pRight,y0:r.ef,y1:r.ef,xref:axisId,yref:'y',line:{color,width:1.8,dash:'dash'}});
+        shapes.push({type:'rect',x0:cLeft,x1:cRight,y0:upsPcbmLevels.homo,y1:upsPcbmLevels.lumo,xref:axisId,yref:'y',fillcolor:UPS_PCBM_COLOR,opacity:0.10,line:{width:0},layer:'below'});
+        shapes.push({type:'line',x0:cLeft,x1:cRight,y0:upsPcbmLevels.lumo,y1:upsPcbmLevels.lumo,xref:axisId,yref:'y',line:{color:UPS_PCBM_COLOR,width:3}},
+            {type:'line',x0:cLeft,x1:cRight,y0:upsPcbmLevels.homo,y1:upsPcbmLevels.homo,xref:axisId,yref:'y',line:{color:UPS_PCBM_COLOR,width:3}});
+        // EF 贴近 CBM 时把标签翻到线下方，避免两行字叠在一起
+        const efBelow=(r.cbm-r.ef)<0.32;
+        annotations.push({x:centerX,y:r.cbm+0.16,xref:axisId,yref:'y',text:`CBM: ${upsValue(r.cbm)} eV`,showarrow:false,font:{size:11,color},xanchor:'center',yanchor:'bottom'},
+            {x:centerX,y:r.vbm+0.14,xref:axisId,yref:'y',text:`VBM: ${upsValue(r.vbm)} eV`,showarrow:false,font:{size:11,color},xanchor:'center',yanchor:'bottom'},
+            {x:centerX,y:efBelow?r.ef-0.13:r.ef+0.13,xref:axisId,yref:'y',text:`E<sub>F</sub>: ${upsValue(r.ef)} eV`,showarrow:false,font:{size:11,color},xanchor:'center',yanchor:efBelow?'top':'bottom'},
+            {x:centerX,y:(r.vbm+r.ef)/2,xref:axisId,yref:'y',text:`E<sub>g</sub> = ${upsValue(r.cbm-r.vbm)} eV`,showarrow:false,font:{size:11,color},xanchor:'center',yanchor:'middle'},
+            {x:pcbmX,y:upsPcbmLevels.lumo+0.16,xref:axisId,yref:'y',text:`LUMO: ${upsValue(upsPcbmLevels.lumo)} eV`,showarrow:false,font:{size:11,color:UPS_PCBM_COLOR},xanchor:'center',yanchor:'bottom'},
+            {x:pcbmX,y:upsPcbmLevels.homo-0.32,xref:axisId,yref:'y',text:`HOMO: ${upsValue(upsPcbmLevels.homo)} eV`,showarrow:false,font:{size:11,color:UPS_PCBM_COLOR},xanchor:'center',yanchor:'top'},
+            {x:centerX,y:labelY,xref:axisId,yref:'y',text:`${escapeHTML(sample.name)}: perovskite`,showarrow:false,font:{size:10,color},xanchor:'center',yanchor:'middle'},
+            {x:pcbmX,y:labelY,xref:axisId,yref:'y',text:'PCBM',showarrow:false,font:{size:10,color:UPS_PCBM_COLOR},xanchor:'center',yanchor:'middle'});
+        const offset=r.cbm-upsPcbmLevels.lumo;
+        annotations.push({x:cLeft-0.04,y:upsPcbmLevels.lumo,xref:axisId,yref:'y',ax:pRight+0.04,ay:r.cbm,axref:axisId,ayref:'y',text:'',showarrow:true,arrowhead:2,arrowsize:1,arrowwidth:1.4,arrowcolor:'#444'},
+            {x:1.62,y:Math.max(r.cbm,upsPcbmLevels.lumo)+0.65,xref:axisId,yref:'y',text:`CBM - LUMO<br>= ${upsSignedOffset(offset)} eV`,showarrow:false,font:{size:11,color:'#111'},xanchor:'center',yanchor:'bottom'});
+    });
+    return {traces,layout,width,height};}
+function upsTangentPoints(sample,key,min,max,shift=upsCurveShift(sample,key)) { const amount=Number.isFinite(shift)?shift:0,manual=sample.manualLines?.[key];if(manual){const points=manual.points.map(([x,y])=>[x+amount,y]);points.push([manual.intersection+amount,0]);return points.sort((a,b)=>a[0]-b[0]);}const data=sample.fitResult[key],baseIntersection=sample.intersections?.[key]??sample.fitResult[`${key}_eV`],intersection=baseIntersection+amount,fit=[];for(let i=0;i<data.energy.length;i++){const x=data.energy[i]+amount;if(x>=min&&x<=max&&data.fit_line[i]!=null)fit.push([x,data.fit_line[i]]);}fit.push([intersection,0]);return fit.sort((a,b)=>a[0]-b[0]); }
+function upsCurveRange(kind,min,max) {
+    const values=[];
+    upsSamples.filter(sample=>sample.status==='success'&&sample.fitResult).forEach(sample=>{
+        const data=sample.fitResult[kind],shift=upsCurveShift(sample,kind);
+        for(let i=0;i<data.energy.length;i++){const x=data.energy[i]+shift;if(x>=min&&x<=max)values.push(x);}
+        values.push(upsCurrentLevels(sample)[kind]);
+        upsTangentPoints(sample,kind,min,max).forEach(point=>values.push(point[0]));
+    });
+    if(!values.length)return [max+0.2,min-0.2];
+    const low=Math.min(...values),high=Math.max(...values),pad=Math.max(0.1,(high-low)*0.05);
+    return [high+pad,low-pad];
+}
+function startUPSTangent(index,key) { upsDrawTarget={index,key,points:[]};document.getElementById('ups-draw-status').textContent=`正在为 ${upsSamples[index].name} 绘制${key==='cutoff'?'截止边':'价带边'}切线：请在对应曲线上依次点击两个点。`; }
+function resetUPSTangents(index) { const sample=upsSamples[index];if(!sample)return;sample.manualLines=null;sample.intersections=null;sample.cutoffShift=0;sample.onsetShift=0;clearUPSErrors(sample);upsDrawTarget=null;renderUPSResults(); }
+function bindUPSDrawing(id,key) {
+    const plot=document.getElementById(id);plot.removeAllListeners?.('plotly_click');
+    plot.on('plotly_click',event=>{
+        if(!upsDrawTarget||upsDrawTarget.key!==key)return;
+        const point=event.points?.[0],meta=point?.data?.meta;
+        if(meta?.role!=='ups-curve'||meta.sampleIndex!==upsDrawTarget.index){alert('请点击所选样品的原始曲线。');return}
+        upsDrawTarget.points.push([Number(point.x),Number(point.y)]);
+        if(upsDrawTarget.points.length<2){document.getElementById('ups-draw-status').textContent='已选择第一个点，请继续点击第二个点。';return}
+        const [[x1,y1],[x2,y2]]=upsDrawTarget.points,slope=(y2-y1)/(x2-x1),expected=key==='cutoff'?-1:1,[low,high]=key==='cutoff'?[14,19]:[-1,2.5];
+        if(!Number.isFinite(slope)||expected*slope<=0){upsDrawTarget.points=[];alert('所选两点不能形成有效切线，请按曲线线性边的方向重新选择两个点。');return}
+        const sample=upsSamples[upsDrawTarget.index],shift=upsCurveShift(sample,key),baseX1=x1-shift,baseX2=x2-shift,baseIntersection=baseX1-y1/slope;
+        if(baseIntersection<low||baseIntersection>high){upsDrawTarget.points=[];alert('所选两点不能形成有效切线，请按曲线线性边的方向重新选择两个点。');return}
+        sample.manualLines={...(sample.manualLines||{}),[key]:{points:[[baseX1,y1],[baseX2,y2]],intersection:baseIntersection}};
+        sample.intersections={cutoff:sample.intersections?.cutoff??sample.fitResult.cutoff_eV,onset:sample.intersections?.onset??sample.fitResult.onset_eV,[key]:baseIntersection};
+        clearUPSErrors(sample);upsDrawTarget=null;renderUPSResults();
+    });
+}
+let upsPlotHeight=300;
+const UPS_COL_MIN=440,UPS_COL_MAX=640,UPS_COL_GAP=24,UPS_PAIR_GAP=12;
+let upsColumnWidth=UPS_COL_MIN,upsResizeFrame=0;
+const UPS_REF_COLORS=['#808080','#ff9a50','#5278bb','#8b5cf6','#d97706','#db2777','#0891b2','#65a30d'];
+let upsEnergyMode='reference';
+function upsColor(index) {
+    const safe=Number.isFinite(index)?Math.abs(Math.trunc(index)):0;
+    return UPS_REF_COLORS[safe%UPS_REF_COLORS.length];
+}
+function isUPSReferencePlot(element) {
+    if(!element||!element.id)return false;
+    return element.id==='ups-energy-plot'||element.id.startsWith('ups-curve-')||element.id==='ups-energy-ref';
+}
+function setUPSEEnergyMode(mode,button) {
+    upsEnergyMode=mode==='pcbm'?'pcbm':'reference';
+    document.querySelectorAll('[data-energy-mode]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.energyMode===upsEnergyMode));
+    renderUPSResults();
+}
+function setUPSPlotHeight(height,button) {
+    upsPlotHeight=Number(height)||300;
+    document.querySelectorAll('.ups-plot-box').forEach(box=>{
+        box.style.height=`${upsPlotHeight}px`;
+        if(box.data)Plotly.Plots.resize(box);
+    });
+    document.querySelectorAll('.ups-size-btn[data-h]').forEach(btn=>btn.classList.toggle('is-active',Number(btn.dataset.h)===upsPlotHeight));
+}
+function upsFigureMetrics(count) {
+    const panels=Math.max(1,Number(count)||1),scroll=document.getElementById('ups-figure-scroll');
+    const available=Math.max(0,(scroll?.clientWidth||UPS_COL_MIN)-UPS_COL_GAP*(panels-1));
+    upsColumnWidth=Math.floor(Math.max(UPS_COL_MIN,Math.min(UPS_COL_MAX,available/panels)));
+    return {column:upsColumnWidth,width:upsColumnWidth*panels+UPS_COL_GAP*(panels-1)};
+}
+function upsPanelWidth() { return Math.floor((upsColumnWidth-UPS_PAIR_GAP)/2); }
+function upsPanelWindow(sample,kind) {
+    const center=upsCurrentLevels(sample)[kind];
+    if(kind==='cutoff')return [Math.max(13,center-1.1),Math.min(20,center+1.1)];
+    return [Math.max(-2,center-1.0),Math.min(4,center+2.2)];
+}
+function upsPanelTraces(sample,kind,low,high,color) {
+    const data=sample.fitResult[kind],shift=upsCurveShift(sample,kind),intersection=upsCurrentLevels(sample)[kind];
+    const points=data.energy.map((x,i)=>[x+shift,data.normalized[i]]).filter(row=>row[0]>=low&&row[0]<=high);
+    const fitPoints=upsTangentPoints(sample,kind,low,high);
+    return [
+        {x:points.map(row=>row[0]),y:points.map(row=>row[1]),mode:'lines',name:sample.name,meta:{role:'ups-curve',sampleIndex:upsSamples.indexOf(sample)},line:{color,width:2.2},hovertemplate:'%{x:.2f} eV<br>%{y:.3f}<extra></extra>'},
+        {x:fitPoints.map(row=>row[0]),y:fitPoints.map(row=>row[1]),mode:'lines',hoverinfo:'skip',showlegend:false,line:{color,width:1.1,dash:'dash'}},
+        {x:[intersection],y:[0],mode:'markers',hoverinfo:'skip',showlegend:false,marker:{color:'#ffffff',size:5.5,line:{color,width:1.3}}}
+    ];
+}
+function upsPanelLayout(sample,kind,low,high,color) {
+    const cutoff=kind==='cutoff',r=upsCurrentLevels(sample);
+    const head=cutoff
+        ? ['Cutoff',`E<sub>c</sub> = ${upsValue(r.cutoff,2)} eV　　\u03a6 = ${upsValue(r.workFunction,2)} eV`]
+        : ['Onset',`E<sub>on</sub> = ${upsValue(r.onset,2)} eV`];
+    const annotations=head.map((line,index)=>({
+        xref:'paper',yref:'paper',x:0.5,y:index===0?1.27:1.13,text:line,showarrow:false,xanchor:'center',yanchor:'middle',
+        font:{size:index===0?13:12,color:'#111111'}
+    }));
+    return {
+        width:upsPanelWidth(),
+        paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',showlegend:false,
+        font:{family:'Arial, Helvetica, sans-serif',color:'#111111',size:11},
+        margin:{l:52,r:14,t:76,b:48},hovermode:'closest',annotations,
+        xaxis:{title:{text:'Binding energy (eV)',font:{size:12,color:'#111111'}},showgrid:false,zeroline:false,showline:true,mirror:true,linecolor:'#333333',linewidth:1,ticks:'outside',ticklen:3,tickcolor:'#333333',tickfont:{size:11,color:'#111111'},range:[high,low]},
+        yaxis:{title:{text:'Intensity (a.u.)',font:{size:12,color:'#111111'}},showgrid:false,zeroline:false,showline:true,mirror:true,linecolor:'#333333',linewidth:1,ticks:'',showticklabels:false,range:[-0.04,1.08]}
+    };
+}
+function upsSharedEnergyMinimum(samples) {
+    const lowest=Math.min(...samples.flatMap(sample=>{const r=upsCurrentLevels(sample);return [r.cbm,r.ef,r.vbm];}));
+    return Math.floor((lowest-0.3)*2)/2;
+}
+function upsReferenceEnergyFigure(samples) {
+    const n=Math.max(1,samples.length),metrics=upsFigureMetrics(n),width=metrics.width,height=360,minEnergy=upsSharedEnergyMinimum(samples);
+    const layout={width,height,paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',showlegend:false,
+        font:{family:'Arial, Helvetica, sans-serif',color:'#111111',size:12},
+        margin:{l:0,r:0,t:20,b:12},
+        yaxis:{range:[minEnergy,0.35],visible:false,fixedrange:true,showgrid:false,zeroline:false},
+        shapes:[],annotations:[]};
+    samples.forEach((sample,index)=>{
+        const axis=index===0?'x':`x${index+1}`,axisKey=index===0?'xaxis':`xaxis${index+1}`;
+        const r=upsCurrentLevels(sample),color=upsColor(upsSamples.indexOf(sample));
+        const offset=index*(metrics.column+UPS_COL_GAP),domainStart=offset/width,domainEnd=(offset+metrics.column)/width;
+        layout[axisKey]={domain:[domainStart,domainEnd],range:[0,1],anchor:'y',fixedrange:true,visible:false,showgrid:false,zeroline:false};
+        layout.shapes.push({type:'line',x0:0.14,x1:0.67,y0:0,y1:0,xref:axis,yref:'y',line:{color:'#777777',width:1.4,dash:'dash'}});
+        layout.annotations.push({x:0.96,y:0,xref:axis,yref:'y',text:'E<sub>vac</sub> = 0 eV',showarrow:false,xanchor:'right',yanchor:'middle',font:{size:12,color:'#111111'}});
+        [{label:'E<sub>C</sub>',v:r.cbm,solid:true},{label:'E<sub>F</sub>',v:r.ef,solid:false},{label:'E<sub>V</sub>',v:r.vbm,solid:true}].forEach(level=>{
+            layout.shapes.push({type:'line',x0:0.14,x1:0.67,y0:level.v,y1:level.v,xref:axis,yref:'y',
+                line:level.solid?{color,width:7}:{color:'#111111',width:1.6,dash:'dash'}});
+            layout.annotations.push({x:0.96,y:level.v,xref:axis,yref:'y',text:`${level.label} = ${upsValue(level.v,2)} eV`,showarrow:false,xanchor:'right',yanchor:'middle',font:{size:12,color:'#111111'}});
+        });
+        layout.annotations.push({x:0.07,y:r.ef,xref:axis,yref:'y',ax:0.07,ay:0,axref:axis,ayref:'y',
+            text:'',showarrow:true,arrowhead:2,arrowsize:1.1,arrowwidth:1.5,arrowcolor:'#111111'});
+        layout.annotations.push({x:0.09,y:r.ef/2,xref:axis,yref:'y',text:`\u03a6 = ${upsValue(r.workFunction,2)} eV`,showarrow:false,xanchor:'left',yanchor:'middle',font:{size:12,color:'#111111'}});
+    });
+    return {traces:[],layout,width,height,minEnergy,columnWidth:metrics.column};
+}
+function renderUPSResults() {
+    syncUPSPCBMInputs();
+    const successful=upsSamples.filter(sample=>sample.status==='success'&&sample.fitResult);
+    document.getElementById('ups-analysis').style.display=successful.length?'block':'none';
+    if (!successful.length) { document.getElementById('ups-fit-controls').innerHTML=''; document.getElementById('ups-summary-table').innerHTML=''; return; }
+    const metrics=upsFigureMetrics(successful.length),figureHost=document.getElementById('ups-figure');
+    figureHost.style.width=`${metrics.width}px`;
+    figureHost.style.setProperty('--ups-col-width',`${metrics.column}px`);
+    const container=document.getElementById('ups-curves');
+    container.innerHTML='';
+    const panels=[];
+    successful.forEach(sample=>{
+        const sampleIndex=upsSamples.indexOf(sample),color=upsColor(sampleIndex);
+        const group=document.createElement('div');group.className='ups-sample-group';group.dataset.sampleIndex=String(sampleIndex);
+        const heading=document.createElement('div');heading.className='ups-sample-heading';
+        const headingLine=document.createElement('span');headingLine.className='ups-sample-heading-line';headingLine.style.background=color;
+        const headingText=document.createElement('span');headingText.textContent=sample.name;
+        heading.appendChild(headingLine);heading.appendChild(headingText);
+        const pair=document.createElement('div');pair.className='ups-curve-pair';
+        ['cutoff','onset'].forEach(kind=>{
+            const panel=document.createElement('div');panel.className='ups-panel';
+            const box=document.createElement('div');box.className='ups-plot-box';box.id=`ups-curve-${kind}-${sampleIndex}`;box.style.height=`${upsPlotHeight}px`;
+            panel.appendChild(box);pair.appendChild(panel);
+            panels.push({box,kind,sample,color});
+        });
+        group.appendChild(heading);group.appendChild(pair);
+        container.appendChild(group);
+    });
+    // 节点全部挂载后再绘图，最后才绑定点击事件
+    panels.forEach(({box,kind,sample,color})=>{
+        const [low,high]=upsPanelWindow(sample,kind);
+        Plotly.react(box.id,upsPanelTraces(sample,kind,low,high,color),upsPanelLayout(sample,kind,low,high,color),{responsive:false,displaylogo:false,displayModeBar:false});
+    });
+    panels.forEach(({box,kind})=>bindUPSDrawing(box.id,kind));
+    const refWrap=document.getElementById('ups-energy-ref-wrap'),pcbmWrap=document.getElementById('ups-energy-pcbm-wrap'),
+        note=document.getElementById('ups-energy-ref-note'),pcbmInputs=document.getElementById('ups-pcbm-controls');
+    if(upsEnergyMode==='reference'){
+        refWrap.style.display='block';pcbmWrap.style.display='none';pcbmInputs.style.display='none';note.style.display='block';
+        const figure=upsReferenceEnergyFigure(successful),host=document.getElementById('ups-energy-ref');
+        host.style.width=`${figure.width}px`;host.style.height=`${figure.height}px`;
+        Plotly.react('ups-energy-ref',figure.traces,figure.layout,{responsive:false,displaylogo:false,displayModeBar:false});
+    }else{
+        refWrap.style.display='none';note.style.display='none';pcbmWrap.style.display='block';pcbmInputs.style.display='';
+        const energyFigure=upsEnergyFigure(successful),energyPlot=document.getElementById('ups-energy-plot');
+        if(energyPlot){energyPlot.style.width=`${energyFigure.width}px`;energyPlot.style.height=`${energyFigure.height}px`;}
+        Plotly.react('ups-energy-plot',energyFigure.traces,energyFigure.layout,{responsive:false,displaylogo:false,displayModeBar:false});
+    }
+    document.getElementById('ups-fit-controls').innerHTML=`<div class="card"><strong>Φ = 21.22 − Ecutoff　　VBM = −(Φ + Eonset)　　CBM = VBM + Eg</strong><div id="ups-draw-status" style="margin-top:8px;color:#64748b">选择样品和切线类型，然后在对应原始曲线上依次点击两个点。</div></div>`+successful.map(sample=>{const index=upsSamples.indexOf(sample),r=upsCurrentLevels(sample);return `<div class="card"><div class="ups-level-head"><strong>${escapeHTML(sample.name)}</strong><span class="fit-status">能级数值（eV）</span></div><div class="ups-level-grid"><label class="control-label">Ecutoff (eV)<input type="number" step="0.01" value="${r.cutoff.toFixed(2)}" data-ups-curve="cutoff" data-ups-sample="${index}" onchange="updateUPSCurveShift(${index},'cutoff',this.value)"><span class="ups-error" data-ups-error="cutoff">${escapeHTML(sample.energyErrors?.cutoff||'')}</span></label><label class="control-label">Eonset (eV)<input type="number" step="0.01" value="${r.onset.toFixed(2)}" data-ups-curve="onset" data-ups-sample="${index}" onchange="updateUPSCurveShift(${index},'onset',this.value)"><span class="ups-error" data-ups-error="onset">${escapeHTML(sample.energyErrors?.onset||'')}</span></label><label class="control-label">VBM (eV)<input type="number" step="0.01" value="${r.vbm.toFixed(2)}" data-ups-level="vbm" data-ups-sample="${index}" onchange="updateUPSEnergyLevel(${index},'vbm',this.value)"><span class="ups-error" data-ups-error="vbm">${escapeHTML(sample.energyErrors?.vbm||'')}</span></label><label class="control-label">CBM (eV)<input type="number" step="0.01" value="${r.cbm.toFixed(2)}" data-ups-level="cbm" data-ups-sample="${index}" onchange="updateUPSEnergyLevel(${index},'cbm',this.value)"><span class="ups-error" data-ups-error="cbm">${escapeHTML(sample.energyErrors?.cbm||'')}</span></label><label class="control-label">EF (eV)<input type="number" step="0.01" value="${r.ef.toFixed(2)}" data-ups-level="ef" data-ups-sample="${index}" onchange="updateUPSEnergyLevel(${index},'ef',this.value)"><span class="ups-error" data-ups-error="ef">${escapeHTML(sample.energyErrors?.ef||'')}</span></label></div><div class="action-row" style="gap:8px;margin-top:10px"><button class="btn btn-secondary" onclick="startUPSTangent(${index},'cutoff')">画截止切线（${r.cutoff.toFixed(2)} eV）</button><button class="btn btn-secondary" onclick="startUPSTangent(${index},'onset')">画价带切线（${r.onset.toFixed(2)} eV）</button><button class="btn btn-secondary" onclick="resetUPSTangents(${index})">恢复自动切线</button></div></div>`}).join('');
+    document.getElementById('ups-summary-table').innerHTML='<tr><th>样品</th><th>Ecutoff (eV)</th><th>Eonset (eV)</th><th>Φ (eV)</th><th>VBM (eV)</th><th>Eg (eV)</th><th>CBM (eV)</th><th>截止 R²</th><th>价带 R²</th></tr>'+successful.map(sample=>{const r=upsLevels(sample),fit=sample.fitResult;return `<tr><td>${escapeHTML(sample.name)}</td><td>${upsValue(r.cutoff,3)}</td><td>${upsValue(r.onset,3)}</td><td>${upsValue(r.workFunction,3)}</td><td>${upsValue(r.vbm,3)}</td><td>${upsValue(sample.bandgap,3)}</td><td>${upsValue(r.cbm,3)}</td><td>${sample.manualLines?.cutoff?'手动':upsValue(fit.cutoff.r_squared,4)}</td><td>${sample.manualLines?.onset?'手动':upsValue(fit.onset.r_squared,4)}</td></tr>`}).join('');
+}
+function resizeUPSResults() {
+    const successful=upsSamples.filter(sample=>sample.status==='success'&&sample.fitResult);
+    if(!successful.length)return;
+    const previous=upsColumnWidth,metrics=upsFigureMetrics(successful.length);
+    if(previous===metrics.column)return;
+    cancelAnimationFrame(upsResizeFrame);
+    upsResizeFrame=requestAnimationFrame(()=>renderUPSResults());
+}
+window.addEventListener('resize',resizeUPSResults);
+function buildUPSWorkbook(successful) {
+    const workbook=XLSX.utils.book_new(),used=new Set(['summary','cutoff plot','onset plot','shifted summary','cutoff plot shifted','onset plot shifted','energy levels','method']);
+    const summary=[['sample','Ecutoff_eV','Eonset_eV','work_function_eV','VBM_eV','bandgap_eV','CBM_eV','cutoff_R2','onset_R2'],...successful.map(sample=>{const r=upsLevels(sample),fit=sample.fitResult;return [sample.name,r.cutoff,r.onset,r.workFunction,r.vbm,sample.bandgap,r.cbm,sample.manualLines?.cutoff?'manual':fit.cutoff.r_squared,sample.manualLines?.onset?'manual':fit.onset.r_squared]})];
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(summary),'Summary');
+    const plotSheet=(key,low,high,shifted)=>{const series=successful.map(sample=>{const r=sample.fitResult[key],shift=shifted?upsCurveShift(sample,key):0,points=[];for(let i=0;i<r.energy.length;i++){const x=r.energy[i]+shift;if(x>=low&&x<=high)points.push([x,r.normalized[i]]);}return {name:sample.name,points,fit:upsTangentPoints(sample,key,low,high,shift)}}),length=Math.max(...series.map(item=>Math.max(item.points.length,item.fit.length))),rows=[series.flatMap(item=>[`${item.name}_energy_eV`,`${item.name}_normalized`,`${item.name}_fit_energy_eV`,`${item.name}_fit`])];for(let i=0;i<length;i++)rows.push(series.flatMap(item=>[...(item.points[i]??['','']),...(item.fit[i]??['',''])]));return XLSX.utils.aoa_to_sheet(rows)};
+    XLSX.utils.book_append_sheet(workbook,plotSheet('cutoff',14,19,false),'Cutoff Plot');
+    XLSX.utils.book_append_sheet(workbook,plotSheet('onset',-1,2.5,false),'Onset Plot');
+    const shiftedSummary=[['sample','Ecutoff_eV','Eonset_eV','work_function_eV','EF_eV','VBM_eV','bandgap_eV','CBM_eV','cutoffShift_eV','onsetShift_eV','cutoff_R2','onset_R2'],...successful.map(sample=>{const r=upsCurrentLevels(sample),fit=sample.fitResult;return [sample.name,r.cutoff,r.onset,r.workFunction,r.ef,r.vbm,sample.bandgap,r.cbm,r.cutoffShift,r.onsetShift,sample.manualLines?.cutoff?'manual':fit.cutoff.r_squared,sample.manualLines?.onset?'manual':fit.onset.r_squared]})];
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(shiftedSummary),'Shifted Summary');
+    XLSX.utils.book_append_sheet(workbook,plotSheet('cutoff',14,19,true),'Cutoff Plot Shifted');
+    XLSX.utils.book_append_sheet(workbook,plotSheet('onset',-1,2.5,true),'Onset Plot Shifted');
+    successful.forEach(sample=>{const r=sample.fitResult,shiftC=upsCurveShift(sample,'cutoff'),shiftO=upsCurveShift(sample,'onset'),tC0=upsTangentPoints(sample,'cutoff',-Infinity,Infinity,0),tC1=upsTangentPoints(sample,'cutoff',-Infinity,Infinity,shiftC),tO0=upsTangentPoints(sample,'onset',-Infinity,Infinity,0),tO1=upsTangentPoints(sample,'onset',-Infinity,Infinity,shiftO),length=Math.max(r.cutoff.energy.length,r.onset.energy.length,tC0.length,tC1.length,tO0.length,tO1.length),rows=[['cutoff_energy_original_eV','cutoff_energy_shifted_eV','cutoff_intensity_raw','cutoff_intensity','cutoff_normalized','cutoff_tangent_source','cutoff_tangent_x_original_eV','cutoff_tangent_y_original','cutoff_tangent_x_shifted_eV','cutoff_tangent_y_shifted','onset_energy_original_eV','onset_energy_shifted_eV','onset_intensity_raw','onset_intensity','onset_normalized','onset_tangent_source','onset_tangent_x_original_eV','onset_tangent_y_original','onset_tangent_x_shifted_eV','onset_tangent_y_shifted']];for(let i=0;i<length;i++){const c=r.cutoff.energy[i],o=r.onset.energy[i],c0=tC0[i]??['',''],c1=tC1[i]??['',''],o0=tO0[i]??['',''],o1=tO1[i]??['',''];rows.push([c??'',c===undefined?'':c+shiftC,r.cutoff.intensity_raw?.[i]??'',r.cutoff.intensity[i]??'',r.cutoff.normalized[i]??'',sample.manualLines?.cutoff?'manual':'fit',c0[0],c0[1],c1[0],c1[1],o??'',o===undefined?'':o+shiftO,r.onset.intensity_raw?.[i]??'',r.onset.intensity[i]??'',r.onset.normalized[i]??'',sample.manualLines?.onset?'manual':'fit',o0[0],o0[1],o1[0],o1[1]]);}XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),safeSheetName(sample.name,used));});
+    const energyLevels=[['sample','original_Ecutoff_eV','original_Eonset_eV','original_Phi_eV','original_EF_eV','original_VBM_eV','original_CBM_eV','current_Ecutoff_eV','current_Eonset_eV','current_Phi_eV','current_EF_eV','current_VBM_eV','current_CBM_eV','Eg_eV','cutoffShift_eV','onsetShift_eV','PCBM_HOMO_eV','PCBM_LUMO_eV','signed_offset_eV'],...successful.map(sample=>{const base=upsLevels(sample),r=upsCurrentLevels(sample);return [sample.name,base.cutoff,base.onset,base.workFunction,base.ef,base.vbm,base.cbm,r.cutoff,r.onset,r.workFunction,r.ef,r.vbm,r.cbm,sample.bandgap,r.cutoffShift,r.onsetShift,upsPcbmLevels.homo,upsPcbmLevels.lumo,r.cbm-upsPcbmLevels.lumo]})];
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(energyLevels),'Energy Levels');
+    appendMethodSheet(workbook,'UPS',{photon_energy_eV:21.22,work_function_formula:'21.22 - Ecutoff',vbm_formula:'-(work function + Eonset)',cbm_formula:'VBM + Eg',shift_model:'per-sample cutoff/onset horizontal shifts',savgol_window:(upsSmoothingSettings()?.window??0),savgol_order:(upsSmoothingSettings()?.order??0),smoothing_model:'Savitzky-Golay applied to raw intensity before normalization and linear-edge fitting',current_cutoff_formula:'base_cutoff + cutoffShift',current_onset_formula:'base_onset + onsetShift',energy_alignment:'vacuum-aligned schematic; interface dipoles and band bending not determined',ups_calibration:'Perovskite UPS estimates + supplied band gap; He I and bias calibration assumptions retained',pcbm_reference:'Nanomaterials 2022, 12, 532, Table 1 (CV + optical gap); doi:10.3390/nano12030532',pcbm_homo_eV:upsPcbmLevels.homo,pcbm_lumo_eV:upsPcbmLevels.lumo},successful.flatMap(sample=>[upsFiles[Number(sample.onsetFile)]?.name,upsFiles[Number(sample.cutoffFile)]?.name].filter(Boolean)));
+    return workbook;
+}
+async function exportUPSExcel() {
+    const successful=upsSamples.filter(sample=>sample.status==='success'&&sample.fitResult); if (!successful.length) return;
+    const workbook=buildUPSWorkbook(successful);
+    const response=await window.pywebview.api.save_excel_python('UPS_Batch_Results.xlsx',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+    if(response==='success') showToast('UPS 结果已导出。'); else if(response?.startsWith('error:')) alert('导出失败：'+response.slice(6));
+}
+async function exportUPSPlot(kind,format='png') {
+    const successful=upsSamples.filter(sample=>sample.status==='success'&&sample.fitResult);
+    if(!successful.length)return;
+    if(kind==='energy'){
+        if(upsEnergyMode==='reference'){
+            const figure=upsReferenceEnergyFigure(successful);
+            await exportPlot('ups-energy-ref','UPS_Energy_Levels_Reference',format,figure.width,figure.height);
+        }else{
+            const figure=upsEnergyFigure(successful);
+            await exportPlot('ups-energy-plot','UPS_Energy_Levels_PCBM',format,figure.width,figure.height);
+        }
+        return;
+    }
+    const targets=[];
+    successful.forEach(sample=>{
+        const index=upsSamples.indexOf(sample);
+        ['cutoff','onset'].forEach(edge=>targets.push([`ups-curve-${edge}-${index}`,`UPS_${sample.name}_${edge}`]));
+    });
+    for(const [id,name] of targets){
+        const element=document.getElementById(id);
+        if(!element)continue;
+        const width=Math.round(element.clientWidth||upsPanelWidth()),height=Math.round(element.clientHeight||upsPlotHeight);
+        await exportPlot(id,name,format,width,height);
+    }
+}
+restoreSettings();
+document.addEventListener('change',event=>{if(SETTING_IDS.includes(event.target.id))saveSettings();});
+document.addEventListener('input',event=>{if(SETTING_IDS.includes(event.target.id))saveSettings();});
+addBoxGroup();
+document.addEventListener('pywebviewready', () => { try { window.pywebview.api.ui_ready(Math.round(performance.now())); checkForUpdates(false); } catch (error) { /* 仅用于启动耗时追踪 */ } });
+</script>
+
+<dialog id="settings-dialog">
+    <div class="dialog-body">
+        <h2 class="settings-title">设置</h2>
+        <p class="settings-sub">外观会保存在本机，下次启动自动应用；不影响分析参数。</p>
+        <button class="toolbar-btn" type="button" onclick="openUpdateDialog()">检查更新</button>
+
+        <div class="settings-section">
+            <span class="control-label">外观</span>
+            <div class="segmented" id="appearance-mode">
+                <button type="button" data-mode="light">浅色</button>
+                <button type="button" data-mode="dark">深色</button>
+                <button type="button" data-mode="system">跟随系统</button>
+            </div>
+            <p class="settings-hint">深色适合暗室或夜间读数，图表会自动换成对应的低亮度配色。</p>
+        </div>
+
+        <div class="settings-section">
+            <span class="control-label">强调色</span>
+            <div class="accent-row" id="appearance-accent">
+                <button type="button" class="accent-chip" data-accent="ocean"><i style="background:#087ef1"></i>海蓝（默认）</button>
+                <button type="button" class="accent-chip" data-accent="teal"><i style="background:#0d9488"></i>深青</button>
+                <button type="button" class="accent-chip" data-accent="graphite"><i style="background:#2b3440"></i>石墨</button>
+                <button type="button" class="accent-chip" data-accent="indigo"><i style="background:#4f46e5"></i>靛紫</button>
+                <button type="button" class="accent-chip" data-accent="sand"><i style="background:#a0522d"></i>暖砂</button>
+            </div>
+            <p class="settings-hint">强调色用于按钮、选中态与图表主色；数据系列始终按同一套色序排列。</p>
+        </div>
+    </div>
+    <div class="dialog-actions">
+        <button class="btn btn-secondary" type="button" onclick="resetAppearance()">恢复默认</button>
+        <button class="btn btn-primary" type="button" style="width:auto;margin:0" onclick="closeSettings()">完成</button>
+    </div>
+</dialog>
+
+<script>
+(function () {
+    'use strict';
+    const KEY = 'perovskite-workstation-appearance-v1';
+    const DEFAULTS = { mode: 'light', accent: 'ocean' };
+    const root = document.documentElement;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const LIGHT_SERIES = ['#087ef1', '#0f9d8a', '#e85d3f', '#8b5cf6', '#d97706', '#db2777', '#0891b2', '#65a30d', '#475569', '#dc2626'];
+    const DARK_MAP = {
+        '#087ef1': '#60a5fa', '#0f9d8a': '#2dd4bf', '#e85d3f': '#fb923c', '#8b5cf6': '#a78bfa',
+        '#d97706': '#fbbf24', '#db2777': '#f472b6', '#0891b2': '#22d3ee', '#65a30d': '#a3e635',
+        '#475569': '#94a3b8', '#dc2626': '#f87171', '#0f766e': '#2dd4bf', '#12a59a': '#2dd4bf',
+        '#1677e8': '#60a5fa', '#17212b': '#e8eef3', '#111': '#e8eef3', '#52606d': '#a7b2bc'
+    };
+
+    function read() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+            return { mode: saved.mode || DEFAULTS.mode, accent: saved.accent || DEFAULTS.accent };
+        } catch (error) { return { ...DEFAULTS }; }
+    }
+
+    function write(config) {
+        try { localStorage.setItem(KEY, JSON.stringify(config)); } catch (error) { /* 隐私模式忽略 */ }
+    }
+
+    function resolvedMode(config) {
+        return config.mode === 'system' ? (media.matches ? 'dark' : 'light') : config.mode;
+    }
+
+    function apply(config, persist) {
+        const mode = resolvedMode(config);
+        root.dataset.mode = mode;
+        root.dataset.accent = config.accent;
+        if (persist !== false) write(config);
+        document.querySelectorAll('#appearance-mode button').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.mode === config.mode);
+        });
+        document.querySelectorAll('#appearance-accent button').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.accent === config.accent);
+        });
+        applyPlotTheme();
+    }
+
+    // ---------- 图表跟随主题 ----------
+    function themeColors() {
+        const css = getComputedStyle(root);
+        const dark = root.dataset.mode === 'dark';
+        return {
+            dark,
+            text: css.getPropertyValue('--t-ink').trim() || (dark ? '#e8eef3' : '#17212b'),
+            sub: css.getPropertyValue('--t-sub').trim() || (dark ? '#a7b2bc' : '#64748b'),
+            grid: dark ? '#242e37' : '#e9eef2',
+            axis: dark ? '#3a4652' : '#cfd9df',
+            data: css.getPropertyValue('--t-data').trim() || (dark ? '#2dd4bf' : '#0f766e'),
+        };
+    }
+
+    function remapColor(color, dark, dataColor) {
+        if (typeof color !== 'string') return color;
+        const key = color.toLowerCase();
+        if (dark) return DARK_MAP[key] || color;
+        if (key === '#087ef1' && dataColor) return dataColor;
+        return color;
+    }
+
+    function themeTrace(trace, dark, dataColor) {
+        if (!trace || typeof trace !== 'object') return trace;
+        const next = { ...trace };
+        if (next.line && next.line.color) {
+            next.line = { ...next.line, color: remapColor(next.line.color, dark, dataColor) };
+        }
+        if (next.marker && typeof next.marker.color === 'string') {
+            next.marker = { ...next.marker, color: remapColor(next.marker.color, dark, dataColor) };
+        }
+        return next;
+    }
+
+    function seriesFor(dataColor, dark) {
+        if (dark) {
+            const unique = [...new Set(Object.values(DARK_MAP))];
+            return unique.length ? unique : LIGHT_SERIES;
+        }
+        const rest = LIGHT_SERIES.filter((color) => color.toLowerCase() !== String(dataColor).toLowerCase());
+        return [dataColor, ...rest];
+    }
+
+    function themeLayout(layout, colors) {
+        const next = { ...(layout || {}) };
+        next.paper_bgcolor = 'rgba(0,0,0,0)';
+        next.plot_bgcolor = 'rgba(0,0,0,0)';
+        next.font = { ...(next.font || {}), color: colors.text };
+        ['xaxis', 'yaxis', 'xaxis2', 'yaxis2', 'xaxis3', 'yaxis3'].forEach((axis) => {
+            if (!next[axis]) return;
+            next[axis] = {
+                ...next[axis],
+                gridcolor: colors.grid,
+                linecolor: colors.axis,
+                zerolinecolor: colors.axis,
+                tickfont: { ...(next[axis].tickfont || {}), color: colors.sub },
+                title: next[axis].title && typeof next[axis].title === 'object'
+                    ? { ...next[axis].title, font: { ...(next[axis].title.font || {}), color: colors.sub } }
+                    : next[axis].title,
+            };
+        });
+        if (!next.colorway) next.colorway = seriesFor(colors.data, colors.dark);
+        return next;
+    }
+
+    const baseColors = new WeakMap();
+
+    function rememberBase(target, data) {
+        if (!data || !target) return;
+        if (baseColors.has(target)) return;
+        baseColors.set(target, (Array.isArray(data) ? data : []).map((trace) => ({
+            line: trace && trace.line ? trace.line.color : undefined,
+            marker: trace && trace.marker ? trace.marker.color : undefined,
+        })));
+    }
+
+    function mapColorValue(value, dark, dataColor) {
+        if (typeof value === 'string') return remapColor(value, dark, dataColor);
+        if (Array.isArray(value)) return value.map((item) => mapColorValue(item, dark, dataColor));
+        return value;
+    }
+
+    function applyPlotTheme() {
+        if (typeof Plotly === 'undefined') return;
+        const colors = themeColors();
+        document.querySelectorAll('.js-plotly-plot').forEach((el) => {
+            if (isUPSReferencePlot(el)) return;
+            try {
+                const relayout = {
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    'font.color': colors.text,
+                    colorway: seriesFor(colors.data, colors.dark),
+                };
+                ['xaxis', 'yaxis', 'xaxis2', 'yaxis2', 'xaxis3', 'yaxis3'].forEach((axis) => {
+                    if (!el.layout || !el.layout[axis]) return;
+                    relayout[axis + '.gridcolor'] = colors.grid;
+                    relayout[axis + '.linecolor'] = colors.axis;
+                    relayout[axis + '.zerolinecolor'] = colors.axis;
+                    relayout[axis + '.tickfont.color'] = colors.sub;
+                });
+                Plotly.relayout(el, relayout);
+
+                const base = baseColors.get(el);
+                if (base && base.length) {
+                    base.forEach((item, index) => {
+                        if (item.line !== undefined) {
+                            Plotly.restyle(el, { 'line.color': mapColorValue(item.line, colors.dark, colors.data) }, [index]);
+                        }
+                        if (item.marker !== undefined) {
+                            Plotly.restyle(el, { 'marker.color': mapColorValue(item.marker, colors.dark, colors.data) }, [index]);
+                        }
+                    });
+                }
+            } catch (error) { /* 图表未就绪时忽略 */ }
+        });
+    }
+
+    function installPlotWrapper() {
+        if (typeof Plotly === 'undefined' || Plotly.__themed) return;
+        Plotly.__themed = true;
+        ['newPlot', 'react'].forEach((name) => {
+            const original = Plotly[name];
+            if (typeof original !== 'function') return;
+            Plotly[name] = function (target, data, layout, config) {
+                const colors = themeColors();
+                const element = typeof target === 'string' ? document.getElementById(target) : target;
+                if (isUPSReferencePlot(element)) {
+                    return original.call(Plotly, target, data, layout, config);
+                }
+                rememberBase(element, data);
+                const themedData = Array.isArray(data) ? data.map((trace) => themeTrace(trace, colors.dark, colors.data)) : data;
+                return original.call(Plotly, target, themedData, themeLayout(layout, colors), config);
+            };
+        });
+    }
+
+    // ---------- 设置对话框 ----------
+    window.openSettings = function () {
+        const dialog = document.getElementById('settings-dialog');
+        if (!dialog) return;
+        apply(read(), false);
+        if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+    };
+    window.closeSettings = function () {
+        const dialog = document.getElementById('settings-dialog');
+        if (!dialog) return;
+        if (typeof dialog.close === 'function') dialog.close(); else dialog.removeAttribute('open');
+    };
+    window.resetAppearance = function () {
+        apply({ ...DEFAULTS });
+    };
+
+    document.addEventListener('click', (event) => {
+        const modeButton = event.target.closest('#appearance-mode button');
+        if (modeButton) {
+            apply({ ...read(), mode: modeButton.dataset.mode });
+            return;
+        }
+        const accentButton = event.target.closest('#appearance-accent button');
+        if (accentButton) {
+            apply({ ...read(), accent: accentButton.dataset.accent });
+        }
+    });
+
+    const onChange = () => { if (read().mode === 'system') apply(read(), false); };
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', onChange);
+
+    const boot = () => { installPlotWrapper(); apply(read(), false); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+    window.addEventListener('load', boot);
+})();
+</script>
+
+</body>
+</html>

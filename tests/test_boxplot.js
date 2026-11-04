@@ -1,0 +1,33 @@
+const fs = require('fs');
+const assert = require('assert');
+const html = fs.readFileSync('src/index.html', 'utf8');
+
+assert(html.includes('>统计箱线图</label>'), 'navigation must include the statistical box plot');
+assert(html.includes('id="box-area" value="0.07065"'), 'box plot must expose one shared device area');
+assert(html.includes('function addBoxGroup()'), 'users must be able to add comparison groups');
+assert(html.includes('＋ 添加对比组'), 'the group list must expose a visible comparison-group button');
+assert(html.includes('multiple accept=".txt,.bin"'), 'each group must accept multiple TXT and BIN files');
+assert(html.includes('class="box-group-drop"'), 'each group must expose a visible drop zone');
+assert(html.includes("event.dataTransfer.files"), 'drop zones must process externally dropped files');
+assert(html.includes("await parseChiBin(file):await parseTxt(file)"), 'box groups must parse both CHI BIN and TXT files');
+assert(html.includes('existing.has(key)||seen.has(key)'), 'repeated imports must deduplicate files');
+assert(html.includes('function boxPercentile(values,percent)'), 'the plot must calculate interpolated quartiles');
+assert(html.includes("type:'rect',xref,yref"), 'the plot must draw colored quartile boxes');
+assert(html.includes("type:'scatter',mode:'markers'"), 'the plot must show every device result as jittered points');
+assert(html.includes("y0:median,y1:median"), 'the plot must draw a median line');
+assert(html.includes("y0:low,y1:q1") && html.includes("y0:q3,y1:high"), 'whiskers must extend to the minimum and maximum');
+assert(html.includes("'#a7a7a7','#3e9dd5','#f0a53c','#f04b55'"), 'the plot must use the supplied publication palette');
+assert(html.includes("grid:{rows:2,columns:2"), 'all four photovoltaic metrics must render in a 2x2 grid');
+assert(html.includes("paper_bgcolor:'#fff',plot_bgcolor:'#fff'"), 'the statistical figure must use an Origin-like white background');
+assert(html.includes("linecolor:'#111'"), 'the statistical figure must use publication-style black axes');
+assert(html.includes("showgrid:false"), 'the statistical figure must not show dashboard grid lines');
+assert(html.includes("displayModeBar:false"), 'the statistical figure must hide the Plotly toolbar');
+assert(html.includes("{key:'Voc (V)'"), 'the four-panel plot must include Voc');
+assert(html.includes("{key:'Jsc (mA/cm²)'"), 'the four-panel plot must include Jsc');
+assert(html.includes("{key:'FF'"), 'the four-panel plot must include FF');
+assert(html.includes("{key:'PCE (%)'"), 'the four-panel plot must include PCE');
+assert(html.includes('group.curves.map(curve=>getPceFromLists'), 'area changes must recalculate every imported curve');
+assert(html.includes("exportPlot('plot-9','Statistical_Box_Plot',format"), 'the plot must export through the shared PNG/SVG path');
+assert(html.includes("save_excel_python('Statistical_Box_Data.xlsx'"), 'per-file metrics must export to Excel');
+
+console.log('Statistical box plot UI checks passed');

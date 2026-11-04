@@ -1,0 +1,32 @@
+const fs = require('fs');
+const assert = require('assert');
+const html = fs.readFileSync('src/index.html', 'utf8');
+const backend = fs.readFileSync('build_exe.py', 'utf8');
+const release = fs.readFileSync('scripts/build_release.ps1', 'utf8');
+
+assert(html.includes('preview_rename_python(mode,prefix)'), 'renaming must preview before execution');
+assert(html.includes('id="rename-preview-table"'), 'rename preview must show old and new names');
+assert(html.includes('undo_rename_python()'), 'users must be able to undo the previous rename');
+assert(backend.includes('def _apply_rename_operations(operations):'), 'rename execution must share rollback-safe logic');
+assert(backend.includes('for source, target in reversed(completed):'), 'partial rename failures must roll back');
+assert(html.includes("const SETTINGS_KEY='perovskite-workstation-settings-v1'"), 'analysis parameters must persist locally');
+assert(html.includes("localStorage.setItem(SETTINGS_KEY"), 'changed parameters must be saved');
+assert(html.includes("function showBatchErrors(resultId,failed)"), 'batch failures must be listed in the result panel');
+assert(html.includes("function appendMethodSheet(workbook,module,parameters,files)"), 'Excel exports must support reproducibility metadata');
+assert((html.match(/appendMethodSheet\(workbook/g) || []).length >= 6, 'scientific Excel exports must contain Method sheets');
+assert(html.includes('function interpolateAtZero(xValues,yValues)'), 'J-V zero crossings must use interpolation');
+assert(release.includes('<span id="app-version">'), 'release builds must synchronize the visible version');
+assert(html.includes("save_plot_python"), 'plot export must use the shared PNG/SVG backend');
+assert(html.includes("'svg'"), 'scientific plots must expose SVG export');
+assert((html.match(/class="nav-group-title"/g) || []).length === 3, 'navigation must be grouped by laboratory workflow');
+assert(!html.includes('class="window-controls"'), 'decorative fake window controls must be removed');
+assert(html.includes('const METHOD_GUIDES='), 'every module must expose an in-app method guide');
+assert(html.includes('id="method-dialog"'), 'method descriptions must open in an accessible dialog');
+assert(html.includes('Jsc 由 V = 0 两侧数据线性插值得到'), 'J-V method text must match the implemented interpolation');
+assert(html.includes("format:'perovskite-workstation-settings'"), 'laboratory parameters must export in a versioned JSON format');
+assert(html.includes('async function importSettings()'), 'laboratory settings must be importable on another computer');
+assert(html.includes("'fit-model'"), 'TRPL model selection must be persisted with other analysis parameters');
+assert(backend.includes('def save_settings_python(self, settings):'), 'desktop backend must save laboratory settings');
+assert(backend.includes('def load_settings_python(self):'), 'desktop backend must validate and load laboratory settings');
+
+console.log('Laboratory workflow checks passed');
