@@ -10,6 +10,7 @@ import json
 import subprocess
 import shutil
 import tempfile
+import webbrowser
 from urllib.parse import unquote_to_bytes
 from update_service import UpdateManager
 
@@ -251,6 +252,20 @@ class BackendAPI:
         trace_startup(f'ui ready (frontend {frontend_ms} ms)')
         return True
 
+    def open_feedback_email(self, subject='', body=''):
+        """打开默认邮件客户端，避免在软件中保存邮箱凭据。"""
+        from urllib.parse import quote
+
+        recipient = 'zhao78574@163.com'
+        mailto = 'mailto:{0}?subject={1}&body={2}'.format(
+            recipient, quote(str(subject)), quote(str(body))
+        )
+        try:
+            webbrowser.open(mailto)
+            return {'status': 'success'}
+        except Exception as error:  # noqa: BLE001
+            return {'status': 'error', 'message': str(error)}
+
     def check_update_python(self, current_version):
         self._updates.check_async(str(current_version))
         return {"status": "started"}
@@ -285,6 +300,7 @@ class BackendAPI:
                 updater_copy, installer, '--pid', str(os.getpid()),
                 '--sha256', str(release.get('sha256', '')),
                 '--publisher', str(release.get('publisher', '')),
+                '--certificate-sha256', str(release.get('certificate_sha256', '')),
                 '--health-marker', marker,
             ], close_fds=True)
         except OSError as error:

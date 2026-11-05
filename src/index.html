@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -338,6 +338,16 @@
             width:17px; height:17px; fill:none; stroke:currentColor;
             stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;
         }
+        .sidebar-options { margin-top: 1.5rem; }
+        .sidebar-options summary {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:10px 2px; color:var(--t-ink-2); font-size:13px; font-weight:650;
+            cursor:pointer; list-style:none;
+        }
+        .sidebar-options summary::-webkit-details-marker { display:none; }
+        .sidebar-options summary::after { content:'⌄'; color:var(--t-muted); font-size:16px; transition:transform .18s; }
+        .sidebar-options:not([open]) summary::after { transform:rotate(-90deg); }
+        .sidebar-options-body { padding-top:4px; }
 </style>
 </head>
 <body>
@@ -352,7 +362,7 @@
                     <circle cx="27.8" cy="27.2" r="2.4" fill="var(--brand-dot,#0F766E)"/>
                 </svg>
             </div>
-            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.2</span></div></div>
+            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.3</span></div></div>
         </div>
         <h3>工作区</h3>
         <div class="radio-group">
@@ -371,6 +381,9 @@
         </div>
         <hr>
 
+        <details class="sidebar-options" open>
+        <summary>分析选项</summary>
+        <div class="sidebar-options-body">
         <div id="cfg-mode-1">
             <span class="control-label">J–V 计算参数</span>
             <div class="unit-field"><input type="number" id="pce-area" value="0.07065" min="0.000001" step="0.00001" onchange="applyPCEAreaToAll()" title="统一有效面积 (cm²)"></div>
@@ -444,6 +457,8 @@
             <input type="number" id="box-area" value="0.07065" min="0.000001" step="0.00001" onchange="recalculateBoxGroups()">
             <div class="fit-status">每个 TXT / BIN 文件代表一个器件。TXT 前两列依次为电压（V）和电流（A）；BIN 支持 CHI LSV 格式。</div>
         </div>
+        </div>
+        </details>
         </div>
         <button type="button" class="sidebar-settings" onclick="openSettings()" title="设置：外观、主题与偏好">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -757,6 +772,20 @@ const METHOD_GUIDES={
 let toastTimer;
 function openMethodGuide() { const mode=Number(document.querySelector('input[name="mode"]:checked').value),guide=METHOD_GUIDES[mode];document.getElementById('method-title').textContent=guide[0]+' · 方法说明';document.getElementById('method-content').textContent=guide[1];document.getElementById('method-dialog').showModal(); }
 function showToast(message) { const toast=document.getElementById('toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),3200); }
+function openFeedback() {
+    const subject = `Perovskite Engine 问题反馈 - v${APP_VERSION}`;
+    const body = [
+        '问题描述：', '',
+        '复现步骤：', '',
+        '期望结果：', '',
+        `软件版本：v${APP_VERSION}`,
+        `系统：${navigator.userAgent}`,
+        '', '请在上方补充问题描述；如有需要，请手动附上日志文件。'
+    ].join('\\n');
+    window.pywebview.api.open_feedback_email(subject, body).then((result) => {
+        if (result?.status === 'error') alert('无法打开邮件客户端：' + result.message);
+    }).catch((error) => alert('无法打开邮件客户端：' + (error.message || error)));
+}
 function openUpdateDialog() { document.getElementById('update-dialog').showModal(); updateAction(); }
 function updateHasUnsavedData() { return Boolean(currentPCEFiles||currentExtFiles||currentTRPLFiles.length||eisResults.length||mppResults.length||upsFiles.length||sclcResults.length||boxGroups.some(group=>group.results?.length)); }
 function updateTaskRunning() { return Boolean(upsSamples.some(sample=>sample.status==='running') || /正在/.test(document.getElementById('fit-progress')?.textContent||'') || /正在/.test(document.getElementById('ups-status')?.textContent||'')); }
@@ -1131,6 +1160,9 @@ function renderPCETable() {
     rows.forEach(({row,index})=>{html+=`<tr>${Object.entries(row).map(([key,value])=>key==='面积 (cm²)'?`<td><input type="number" min="0.000001" step="0.00001" value="${value}" onchange="updatePCEArea(${index},this.value)" aria-label="${escapeHTML(row['文件名'])} 面积"></td>`:`<td>${escapeHTML(value)}</td>`).join('')}</tr>`});
     document.getElementById('table-1').innerHTML=html;
 }
+function maxPCEValue(rows, key) {
+    return rows.reduce((max, row) => Number(row[key]) > Number(max) ? row[key] : max, rows[0][key]);
+}
 function renderPCE() {
     if(pceDataCache.length > 0) {
         const do_log = document.getElementById('pce-log').checked;
@@ -1146,11 +1178,10 @@ function renderPCE() {
         };
         Plotly.newPlot('plot-1', pceSeries.map(item=>item.trace), layout, {responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d']});
         renderPCETable();
-        const firstResult = pceDataCache[0];
-        document.getElementById('metric-voc').innerHTML = `${firstResult["Voc (V)"]} <small>V</small>`;
-        document.getElementById('metric-jsc').innerHTML = `${firstResult["Jsc (mA/cm²)"]} <small>mA/cm²</small>`;
-        document.getElementById('metric-ff').textContent = firstResult["FF"];
-        document.getElementById('metric-pce').innerHTML = `${firstResult["PCE (%)"]} <small>%</small>`;
+        document.getElementById('metric-voc').innerHTML = `${maxPCEValue(pceDataCache, "Voc (V)")} <small>V</small>`;
+        document.getElementById('metric-jsc').innerHTML = `${maxPCEValue(pceDataCache, "Jsc (mA/cm²)")} <small>mA/cm²</small>`;
+        document.getElementById('metric-ff').textContent = maxPCEValue(pceDataCache, "FF");
+        document.getElementById('metric-pce').innerHTML = `${maxPCEValue(pceDataCache, "PCE (%)")} <small>%</small>`;
     }
 }
 function addBoxGroup() {
@@ -1962,6 +1993,7 @@ document.addEventListener('pywebviewready', () => { try { window.pywebview.api.u
         <h2 class="settings-title">设置</h2>
         <p class="settings-sub">外观会保存在本机，下次启动自动应用；不影响分析参数。</p>
         <button class="toolbar-btn" type="button" onclick="openUpdateDialog()">检查更新</button>
+        <button class="toolbar-btn" type="button" onclick="openFeedback()">问题反馈</button>
 
         <div class="settings-section">
             <span class="control-label">外观</span>

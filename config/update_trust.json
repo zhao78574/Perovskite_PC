@@ -1,0 +1,7 @@
+{
+  "publisher": "CN=Perovskite Engine Internal",
+  "certificate_sha256": "12925004ec1ef5a92077a88b40140e2a63115d011a1332e5f3cfe0732d5c2135",
+  "certificate_asset": "PerovskiteEngine-Internal.cer",
+  "manifest_asset": "release-manifest.json",
+  "manifest_signature_asset": "release-manifest.json.sig"
+}

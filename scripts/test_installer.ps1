@@ -28,10 +28,14 @@ function Assert-True($condition, $message) {
 
 if (-not (Test-Path -LiteralPath $setup)) { throw "找不到安装包 $setup" }
 Write-Step "安装包：$setup（$([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB）"
-$publisher = $env:PEROVSKITE_UPDATE_PUBLISHER
-if (-not $publisher) { throw '未设置 PEROVSKITE_UPDATE_PUBLISHER，拒绝测试未配置发布者校验的安装包。' }
+$trust = Get-Content -LiteralPath (Join-Path $root 'config\update_trust.json') -Raw | ConvertFrom-Json
+$publisher = $trust.publisher
 $signature = Get-AuthenticodeSignature -LiteralPath $setup
-Assert-True ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject.Contains($publisher)) '安装包 Authenticode 签名和发布者正确'
+Assert-True ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -eq $publisher) '安装包 Authenticode 签名和发布者正确'
+$sha = [System.Security.Cryptography.SHA256]::Create()
+try { $certificateSha256 = ([BitConverter]::ToString($sha.ComputeHash($signature.SignerCertificate.RawData)) -replace '-', '').ToLowerInvariant() }
+finally { $sha.Dispose() }
+Assert-True ($certificateSha256 -eq $trust.certificate_sha256.ToLowerInvariant()) '安装包签名证书 SHA-256 指纹正确'
 $shaFile = $setup + '.sha256'
 Assert-True (Test-Path -LiteralPath $shaFile) '安装包 SHA-256 sidecar 存在'
 $expectedHash = ((Get-Content -LiteralPath $shaFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
@@ -53,6 +57,7 @@ Write-Step '2/3 校验打包内容'
 $exe = Join-Path $InstallDir 'PerovskiteEngine.exe'
 $updater = Join-Path $InstallDir 'Updater.exe'
 $index = Join-Path $InstallDir '_internal\src\index.html'
+$trustFile = Join-Path $InstallDir '_internal\config\update_trust.json'
 $vendor = Join-Path $InstallDir '_internal\src\vendor'
 $unins = Join-Path $InstallDir 'unins000.exe'
 
@@ -60,6 +65,7 @@ Assert-True (Test-Path -LiteralPath $exe) '主程序 PerovskiteEngine.exe 存在
 Assert-True (Test-Path -LiteralPath $updater) '独立 Updater.exe 存在'
 Assert-True ((Get-Item $exe).Length -gt 5MB) '主程序体积正常（> 5 MB）'
 Assert-True (Test-Path -LiteralPath $index) '页面文件 _internal\src\index.html 存在'
+Assert-True (Test-Path -LiteralPath $trustFile) '更新信任配置已打包'
 Assert-True (Test-Path -LiteralPath $unins) '卸载程序 unins000.exe 存在'
 
 $html = Get-Content -LiteralPath $index -Raw -Encoding UTF8

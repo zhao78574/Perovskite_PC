@@ -5,7 +5,7 @@ a = Analysis(
     ['../build_exe.py'],
     pathex=['..'],
     binaries=[],
-    datas=[('../src/index.html', 'src'), ('../src/vendor', 'src/vendor')],
+    datas=[('../src/index.html', 'src'), ('../src/vendor', 'src/vendor'), ('../config/update_trust.json', 'config')],
     hiddenimports=['scipy.optimize', 'bottle', 'typing_extensions', 'webview.http'],
     hookspath=[],
     hooksconfig={},

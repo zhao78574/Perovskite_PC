@@ -17,6 +17,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version,
+    [ValidateSet('Development', 'InternalSigned')][string]$Mode = 'Development',
+    [string]$SignToolPath,
+    [string]$CertificateFile,
     [switch]$SkipInstaller
 )
 
@@ -25,8 +28,89 @@ $root = Split-Path -Parent $PSScriptRoot
 $specDir = Join-Path $root 'packaging'
 $issPath = Join-Path $specDir 'PerovskiteEngine.iss'
 $htmlPath = Join-Path $root 'src\index.html'
+$manifestSigner = Join-Path $PSScriptRoot 'sign_update_manifest.ps1'
 
 function Write-Step($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
+
+function Resolve-SignTool {
+    param([string]$Requested)
+    $candidates = @(
+        $Requested,
+        $env:SIGNTOOL_PATH,
+        (Get-Command signtool.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
+        'C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe',
+        'C:\Program Files (x86)\Windows Kits\10\bin\x86\signtool.exe'
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+    if (-not $candidates) { throw 'InternalSigned mode requires SignTool. Pass -SignToolPath or set SIGNTOOL_PATH.' }
+    return @($candidates)[0]
+}
+
+function Get-CertificateInfo {
+    param([string]$RequestedPath)
+    $path = $RequestedPath
+    if (-not $path) {
+        $path = Get-ChildItem -LiteralPath (Join-Path $root 'certificates') -Filter 'PerovskiteEngine-Internal.cer' -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (-not $path -or -not (Test-Path -LiteralPath $path)) { throw 'InternalSigned mode requires the public .cer certificate file.' }
+    $certificate = Get-PfxCertificate -FilePath $path
+    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $path))
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $certificateSha256 = ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    $trust = Get-Content -LiteralPath (Join-Path $root 'config\update_trust.json') -Raw | ConvertFrom-Json
+    if ($certificateSha256 -ne $trust.certificate_sha256.ToLowerInvariant()) {
+        throw 'Certificate SHA-256 does not match config/update_trust.json.'
+    }
+    if ($certificate.Subject -ne $trust.publisher) { throw 'Certificate Subject does not match the internal publisher.' }
+    return [pscustomobject]@{
+        Path = (Resolve-Path -LiteralPath $path).Path
+        Thumbprint = $certificate.Thumbprint
+        Publisher = $certificate.Subject
+        CertificateSha256 = $certificateSha256
+    }
+}
+
+function Sign-File {
+    param([string]$Path, [string]$Tool, [string]$Thumbprint)
+    & $Tool sign /fd SHA256 /sha1 $Thumbprint $Path
+    if ($LASTEXITCODE -ne 0) { throw "SignTool failed for $Path with exit code $LASTEXITCODE." }
+}
+
+function Assert-Signature {
+    param([string]$Path, $CertificateInfo)
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -ne $CertificateInfo.Publisher) {
+        throw "Invalid Authenticode signature: $Path / $($signature.Status) / $($signature.SignerCertificate.Subject)"
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $actual = ([BitConverter]::ToString($sha.ComputeHash($signature.SignerCertificate.RawData)) -replace '-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    if ($actual -ne $CertificateInfo.CertificateSha256) { throw "Certificate fingerprint mismatch: $Path" }
+}
+
+function Wait-FileReady {
+    param([string]$Path, [int]$TimeoutSeconds = 30)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            $stream.Dispose()
+            return
+        }
+        catch [System.IO.IOException] { Start-Sleep -Milliseconds 500 }
+    }
+    throw "Timed out waiting for file to be released: $Path"
+}
+
+$signTool = $null
+$certificateInfo = $null
+if ($Mode -eq 'InternalSigned') {
+    $signTool = Resolve-SignTool $SignToolPath
+    $certificateInfo = Get-CertificateInfo $CertificateFile
+    Write-Host "  publisher: $($certificateInfo.Publisher)"
+    Write-Host "  cert sha256: $($certificateInfo.CertificateSha256)"
+}
 
 Write-Step "1/4 同步版本号到安装脚本（$Version）"
 $iss = Get-Content -LiteralPath $issPath -Raw -Encoding UTF8
@@ -84,21 +168,55 @@ if (-not $candidates) {
 }
 if (-not $candidates) { throw '找不到 ISCC.exe（Inno Setup 编译器）：请安装 Inno Setup 6，或设置 INNO_SETUP 环境变量。' }
 
+if ($Mode -eq 'InternalSigned') {
+    Write-Step '签名主程序和 Updater.exe'
+    $updaterExe = Join-Path $specDir 'release-dist\Updater.exe'
+    Sign-File $exe $signTool $certificateInfo.Thumbprint
+    Sign-File $updaterExe $signTool $certificateInfo.Thumbprint
+    Assert-Signature $exe $certificateInfo
+    Assert-Signature $updaterExe $certificateInfo
+}
+
 $iscc = @($candidates)[0]; & $iscc $issPath
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup 失败，退出码 $LASTEXITCODE" }
 
 $setup = Get-ChildItem -LiteralPath (Join-Path $specDir 'installers') -Filter "PerovskiteEngine-Setup-$Version.exe" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $setup) { throw "未生成安装包 PerovskiteEngine-Setup-$Version.exe" }
-$publisher = $env:PEROVSKITE_UPDATE_PUBLISHER
-if (-not $publisher) { throw '未设置 PEROVSKITE_UPDATE_PUBLISHER，拒绝发布未配置发布者校验的安装包。' }
-$signature = Get-AuthenticodeSignature -LiteralPath $setup.FullName
-if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate.Subject.Contains($publisher)) {
-    throw "安装包 Authenticode 签名无效或发布者不匹配：$($signature.Status) / $($signature.SignerCertificate.Subject)"
+Wait-FileReady $setup.FullName
+if ($Mode -eq 'Development') {
+    Write-Host "`n完成开发模式构建："
+    Write-Host "  exe   : $exe"
+    Write-Host "  setup : $($setup.FullName)"
+    return
 }
+
+Write-Step '签名安装包并生成可信更新清单'
+Sign-File $setup.FullName $signTool $certificateInfo.Thumbprint
+Assert-Signature $setup.FullName $certificateInfo
 $digest = (Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-Set-Content -LiteralPath ($setup.FullName + '.sha256') -Value "$digest  $($setup.Name)" -Encoding ASCII
+$manifestPath = Join-Path $setup.DirectoryName 'release-manifest.json'
+$signaturePath = Join-Path $setup.DirectoryName 'release-manifest.json.sig'
+$manifest = [ordered]@{
+    certificate_sha256 = $certificateInfo.CertificateSha256
+    installer = $setup.Name
+    notes = "Perovskite Engine $Version"
+    publisher = $certificateInfo.Publisher
+    sha256 = $digest
+    version = $Version
+}
+$manifestJson = $manifest | ConvertTo-Json -Compress
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding($false)))
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $manifestSigner -ManifestPath $manifestPath -SignaturePath $signaturePath -CertificateThumbprint $certificateInfo.Thumbprint
+if ($LASTEXITCODE -ne 0) { throw 'Update manifest signing failed.' }
+Copy-Item -LiteralPath $certificateInfo.Path -Destination (Join-Path $setup.DirectoryName 'PerovskiteEngine-Internal.cer') -Force
+$digestLine = "$digest  $($setup.Name)"
+Set-Content -LiteralPath ($setup.FullName + '.sha256') -Value $digestLine -Encoding ASCII
+$manifestSignature = Get-Content -LiteralPath $signaturePath -Raw
+if (-not $manifestSignature.Trim()) { throw 'Update manifest signature is empty.' }
 Write-Host "`n完成：" -ForegroundColor Green
 Write-Host "  exe   : $exe"
 Write-Host ('  setup : {0}  ({1:N1} MB)' -f $setup.FullName, ($setup.Length / 1MB))
 Write-Host "  sha256: $($setup.FullName).sha256"
+Write-Host "  manifest: $manifestPath"
+Write-Host "  signature: $signaturePath"

@@ -20,3 +20,7 @@ packaging/release-build-updater/
 packaging/installers/
 *.exe
 *.sha256
+*.pfx
+*.p12
+*.key
+certificates-private/

@@ -20,6 +20,7 @@ def main() -> int:
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--publisher", required=True)
+    parser.add_argument("--certificate-sha256", required=True)
     parser.add_argument("--health-marker", required=True)
     args = parser.parse_args()
     installer = Path(args.installer).resolve()
@@ -29,7 +30,7 @@ def main() -> int:
     if digest.lower() != args.sha256.lower():
         return 3
     try:
-        _verify_authenticode(installer, args.publisher)
+        _verify_authenticode(installer, args.publisher, args.certificate_sha256)
     except UpdateError:
         return 3
     deadline = time.monotonic() + 60

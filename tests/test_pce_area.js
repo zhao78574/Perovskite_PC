@@ -16,6 +16,17 @@ assert(html.includes("pceSort.direction==='asc'?'▲':'▼'"), 'active headers m
 assert(html.includes('onclick=\'sortPCETable('), 'clicking a header must sort the J-V result table');
 assert(html.includes('updatePCEArea(${index},this.value)'), 'sorted rows must retain their original editable area index');
 
+const maxPceValueSource = html.match(/function maxPCEValue\([\s\S]*?\n}/)[0];
+eval(maxPceValueSource);
+const metricRows = [
+    {'Voc (V)': '1.1000', 'Jsc (mA/cm²)': '24.0000', FF: '0.7000', 'PCE (%)': '18.0000'},
+    {'Voc (V)': '1.2000', 'Jsc (mA/cm²)': '22.0000', FF: '0.8000', 'PCE (%)': '20.0000'},
+];
+assert.strictEqual(maxPCEValue(metricRows, 'Voc (V)'), '1.2000', 'Voc card must show the maximum across samples');
+assert.strictEqual(maxPCEValue(metricRows, 'Jsc (mA/cm²)'), '24.0000', 'Jsc card must show the maximum across samples');
+assert.strictEqual(maxPCEValue(metricRows, 'FF'), '0.8000', 'FF card must show the maximum across samples');
+assert.strictEqual(maxPCEValue(metricRows, 'PCE (%)'), '20.0000', 'PCE card must show the maximum across samples');
+
 const compareSource = html.match(/function comparePCEValues\([\s\S]*?\n}/)[0];
 eval(compareSource);
 assert(comparePCEValues('2.txt', '10.txt', '文件名') < 0, 'filename sorting must use natural numeric order');
