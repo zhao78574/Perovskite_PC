@@ -376,7 +376,7 @@
                     <circle cx="27.8" cy="27.2" r="2.4" fill="var(--brand-dot,#0F766E)"/>
                 </svg>
             </div>
-            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.5</span></div></div>
+            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.6</span></div></div>
         </div>
         <h3>工作区</h3>
         <div class="radio-group">
@@ -781,11 +781,15 @@
     <dialog id="update-dialog">
         <div class="dialog-body">
             <div class="section-title">软件更新</div>
+            <div id="update-current" class="fit-status"></div>
             <div id="update-status" class="fit-status">尚未检查。</div>
             <pre id="update-notes" style="white-space:pre-wrap;max-height:220px;overflow:auto"></pre>
+            <div id="update-sha256" class="fit-status" style="word-break:break-all"></div>
         </div>
         <div class="dialog-actions">
             <button class="btn btn-secondary" onclick="document.getElementById('update-dialog').close()">稍后提醒</button>
+            <button class="btn btn-secondary" id="update-copy-sha" onclick="copyUpdateSha256()" disabled>复制 SHA256</button>
+            <button class="btn btn-secondary" id="update-open-release" onclick="openReleasePage()">打开 GitHub Release 页面</button>
             <button class="btn btn-primary" id="update-action" onclick="updateAction()">检查更新</button>
         </div>
     </dialog>
@@ -837,20 +841,46 @@ function openUpdateDialog() { document.getElementById('update-dialog').showModal
 function updateHasUnsavedData() { return Boolean(currentPCEFiles||currentExtFiles||currentTRPLFiles.length||eisResults.length||mppResults.length||upsFiles.length||sclcResults.length||xpsResults.length||boxGroups.some(group=>group.results?.length)); }
 function updateTaskRunning() { return Boolean(upsSamples.some(sample=>sample.status==='running') || /正在/.test(document.getElementById('fit-progress')?.textContent||'') || /正在/.test(document.getElementById('ups-status')?.textContent||'')); }
 function renderUpdateState() {
-    const status=document.getElementById('update-status'), notes=document.getElementById('update-notes'), action=document.getElementById('update-action');
+    const current=document.getElementById('update-current'), status=document.getElementById('update-status'), notes=document.getElementById('update-notes'), sha=document.getElementById('update-sha256'), action=document.getElementById('update-action'), open=document.getElementById('update-open-release'), copy=document.getElementById('update-copy-sha');
     if(!status||!action)return;
     const release=updateState.release;
+    if(current)current.textContent=`当前版本：v${APP_VERSION}`;
+    if(open)open.disabled=false;
+    if(copy)copy.disabled=!release?.sha256;
+    if(sha)sha.textContent=release?.sha256?`预期 SHA256：${release.sha256}`:'';
     if(updateState.status==='checking'){status.textContent='正在检查更新…';action.disabled=true;}
-    else if(updateState.status==='available'){status.textContent=`发现新版本 v${release.version}，点击下载并校验。`;notes.textContent=release.notes||'暂无更新日志。';action.disabled=false;action.textContent='下载更新';}
-    else if(updateState.status==='downloading'){status.textContent=`正在下载并验证安装包… ${updateState.progress||0}%`;action.disabled=true;}
-    else if(updateState.status==='ready'){status.textContent='安装包已通过 SHA-256 和发布者签名验证。';action.disabled=false;action.textContent='立即更新';}
-    else if(updateState.status==='up-to-date'){status.textContent='当前已是最新版本。';action.disabled=false;action.textContent='重新检查';}
+    else if(updateState.status==='available'){status.textContent=`发现新版本 v${release.version}`;notes.textContent=release.notes||'暂无更新日志。';action.disabled=false;action.textContent='重新检查';}
+    else if(updateState.status==='up-to-date'){status.textContent=`没有更新版本（当前 v${APP_VERSION}，GitHub 最新 v${release.version}）。`;notes.textContent=release?.notes||'';action.disabled=false;action.textContent='重新检查';}
     else if(updateState.status==='error'){status.textContent='更新失败：'+(updateState.error||'未知错误');action.disabled=false;action.textContent='重新检查';}
     else {status.textContent='尚未检查。';action.disabled=false;action.textContent='检查更新';}
 }
-async function pollUpdateState() { try { updateState=await window.pywebview.api.update_status_python();renderUpdateState();if(['checking','downloading'].includes(updateState.status))updatePollTimer=setTimeout(pollUpdateState,500); } catch(error) { updateState={status:'error',error:error.message};renderUpdateState(); } }
-async function checkForUpdates(showDialog=false) { if(showDialog)document.getElementById('update-dialog').showModal(); await window.pywebview.api.check_update_python(APP_VERSION); await pollUpdateState(); }
-async function updateAction() { if(updateState.status==='available'){ await window.pywebview.api.download_update_python(); await pollUpdateState(); return; } if(updateState.status==='ready'){ const result=await window.pywebview.api.launch_update_python(updateHasUnsavedData(),updateTaskRunning()); if(result.status==='blocked'||result.status==='error')alert(result.message); else window.close(); return; } await checkForUpdates(true); }
+async function pollUpdateState() { try { updateState=await window.pywebview.api.update_status_python();renderUpdateState();if(updateState.status==='checking')updatePollTimer=setTimeout(pollUpdateState,500); } catch(error) { updateState={status:'error',error:error.message};renderUpdateState(); } }
+async function checkForUpdates(showDialog=false, automatic=false) {
+    if(showDialog&&!document.getElementById('update-dialog').open)document.getElementById('update-dialog').showModal();
+    try {
+        const result=await window.pywebview.api.check_update_python(APP_VERSION,automatic);
+        if(result?.status==='throttled')return;
+        await pollUpdateState();
+    } catch(error) {
+        updateState={status:'error',error:error.message||String(error)};
+        renderUpdateState();
+    }
+}
+async function openReleasePage() {
+    try {
+        const result=await window.pywebview.api.open_release_page_python(updateState.release?.release_url||'');
+        if(result?.status==='error')alert(result.message);
+    } catch(error) { alert('无法打开 GitHub Release 页面：'+(error.message||error)); }
+}
+async function copyUpdateSha256() {
+    const value=updateState.release?.sha256;
+    if(!value)return;
+    try { await navigator.clipboard.writeText(value); showToast('SHA256 已复制。'); }
+    catch(error) { window.prompt('请复制 SHA256：',value); }
+}
+async function updateAction() {
+    await checkForUpdates(true,false);
+}
 async function exportPlot(plotId,baseName,format='png',width=1200,height=720) { try { const data=await Plotly.toImage(plotId,{format,width,height,scale:format==='png'?2:1});const response=await window.pywebview.api.save_plot_python(`${baseName}.${format}`,data);if(response==='success')showToast(`图像已导出为 ${format.toUpperCase()}。`);else if(response?.startsWith('error:'))alert('图片导出失败：'+response.slice(6)); } catch(error) { alert('图片导出失败：'+(error.message||error)); } }
 function showBatchErrors(resultId,failed) { let panel=document.querySelector(`#${resultId} .batch-errors`);if(!panel){panel=document.createElement('div');panel.className='card batch-errors';document.getElementById(resultId).prepend(panel);}panel.style.display=failed.length?'block':'none';panel.innerHTML=failed.length?`<strong>已跳过 ${failed.length} 个文件</strong><div class="rename-warning">${failed.map(name=>escapeHTML(name)).join('<br>')}</div>`:''; }
 function appendMethodSheet(workbook,module,parameters,files) { const rows=[['Perovskite Workstation · Laboratory Edition'],['software_version',APP_VERSION],['analysis_module',module],['exported_at',new Date().toISOString()],[],['parameter','value'],...Object.entries(parameters),[],['input_file'],...files.map(name=>[name])];XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),'Method'); }
@@ -2256,7 +2286,7 @@ restoreSettings();
 document.addEventListener('change',event=>{if(SETTING_IDS.includes(event.target.id))saveSettings();});
 document.addEventListener('input',event=>{if(SETTING_IDS.includes(event.target.id))saveSettings();});
 addBoxGroup();
-document.addEventListener('pywebviewready', () => { try { window.pywebview.api.ui_ready(Math.round(performance.now())); checkForUpdates(false); } catch (error) { /* 仅用于启动耗时追踪 */ } });
+document.addEventListener('pywebviewready', () => { try { window.pywebview.api.ui_ready(Math.round(performance.now())); setTimeout(() => checkForUpdates(false,true), 4000); } catch (error) { /* 仅用于启动耗时追踪 */ } });
 </script>
 
 <dialog id="settings-dialog">

@@ -15,11 +15,8 @@ analysis/mpp_output/
 data/
 outputs/
 archive/
-packaging/release-dist/
-packaging/release-build/
-packaging/release-build-updater/
-packaging/release-build-feedback*/
-packaging/release-dist-feedback*/
+packaging/release-dist*/
+packaging/release-build*/
 packaging/installers/
 *.exe
 *.sha256

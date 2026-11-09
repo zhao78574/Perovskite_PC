@@ -8,11 +8,9 @@ import struct
 import math
 import json
 import subprocess
-import shutil
-import tempfile
 import webbrowser
 from urllib.parse import unquote_to_bytes
-from update_service import UpdateManager
+from update_service import UpdateManager, RELEASES_URL, is_official_release_url
 
 # ---------------------------------------------------------------- 启动环境
 
@@ -246,6 +244,7 @@ class BackendAPI:
         self._rename_plan = []
         self._last_rename = []
         self._updates = UpdateManager()
+        self._auto_update_marker = os.path.join(APP_DIR, 'update-check.json')
 
     def ui_ready(self, frontend_ms=None):
         """前端脚本执行完毕时回调，仅在开启启动追踪时写日志。"""
@@ -279,46 +278,37 @@ class BackendAPI:
         except Exception as error:  # noqa: BLE001
             return {'status': 'error', 'message': str(error)}
 
-    def check_update_python(self, current_version):
+    def check_update_python(self, current_version, automatic=False):
+        if automatic:
+            try:
+                with open(self._auto_update_marker, 'r', encoding='utf-8') as marker_file:
+                    last_check = float(json.load(marker_file).get('last_check', 0))
+                if time.time() - last_check < 24 * 60 * 60:
+                    return {"status": "throttled"}
+            except (OSError, ValueError, TypeError):
+                pass
+            try:
+                os.makedirs(APP_DIR, exist_ok=True)
+                with open(self._auto_update_marker, 'w', encoding='utf-8') as marker_file:
+                    json.dump({'last_check': time.time()}, marker_file)
+            except OSError:
+                pass
         self._updates.check_async(str(current_version))
         return {"status": "started"}
 
     def update_status_python(self):
         return self._updates.state()
 
-    def download_update_python(self):
-        self._updates.download_async()
-        return {"status": "started"}
-
-    def launch_update_python(self, has_unsaved=False, task_running=False):
-        if has_unsaved or task_running:
-            return {"status": "blocked", "message": "请先导出结果并等待科研任务完成。"}
-        state = self._updates.state()
-        installer = state.get("installer")
-        if state.get("status") != "ready" or not installer or not os.path.isfile(installer):
-            return {"status": "error", "message": "更新包尚未完成验证。"}
-        updater = get_app_path('Updater.exe')
-        if not os.path.isfile(updater):
-            return {"status": "error", "message": "缺少 Updater.exe，请重新安装软件。"}
+    def open_release_page_python(self, release_url):
+        url = str(release_url or RELEASES_URL)
+        if not is_official_release_url(url):
+            return {"status": "error", "message": "更新页面地址不属于官方 GitHub Release。"}
         try:
-            release = state.get('release') or {}
-            os.makedirs(APP_DIR, exist_ok=True)
-            marker = os.path.join(APP_DIR, 'update-pending.json')
-            with open(marker, 'w', encoding='utf-8') as marker_file:
-                json.dump({'status': 'pending', 'version': release.get('version')}, marker_file)
-            with tempfile.NamedTemporaryFile(prefix='PerovskiteEngine-Updater-', suffix='.exe', delete=False) as updater_file:
-                updater_copy = updater_file.name
-            shutil.copy2(updater, updater_copy)
-            subprocess.Popen([
-                updater_copy, installer, '--pid', str(os.getpid()),
-                '--sha256', str(release.get('sha256', '')),
-                '--publisher', str(release.get('publisher', '')),
-                '--certificate-sha256', str(release.get('certificate_sha256', '')),
-                '--health-marker', marker,
-            ], close_fds=True)
-        except OSError as error:
-            return {"status": "error", "message": f"无法启动更新程序：{error}"}
-        return {"status": "success"}
+            if webbrowser.open(url, new=2):
+                return {"status": "success"}
+            return {"status": "error", "message": "无法打开浏览器，请复制 Release 页面地址手动打开。"}
+        except Exception as error:  # noqa: BLE001
+            return {"status": "error", "message": f"无法打开 Release 页面：{error}"}
 
     def fit_trpl_python(self, x_values, y_values, model="expdec2"):
         try:

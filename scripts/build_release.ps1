@@ -185,9 +185,13 @@ $setup = Get-ChildItem -LiteralPath (Join-Path $specDir 'installers') -Filter "P
 if (-not $setup) { throw "未生成安装包 PerovskiteEngine-Setup-$Version.exe" }
 Wait-FileReady $setup.FullName
 if ($Mode -eq 'Development') {
+    $digest = (Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $digestLine = "$digest  $($setup.Name)"
+    Set-Content -LiteralPath ($setup.FullName + '.sha256') -Value $digestLine -Encoding ASCII
     Write-Host "`n完成开发模式构建："
     Write-Host "  exe   : $exe"
     Write-Host "  setup : $($setup.FullName)"
+    Write-Host "  sha256: $($setup.FullName).sha256"
     return
 }
 
