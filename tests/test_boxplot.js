@@ -29,5 +29,12 @@ assert(html.includes("{key:'PCE (%)'"), 'the four-panel plot must include PCE');
 assert(html.includes('group.curves.map(curve=>getPceFromLists'), 'area changes must recalculate every imported curve');
 assert(html.includes("exportPlot('plot-9','Statistical_Box_Plot',format"), 'the plot must export through the shared PNG/SVG path');
 assert(html.includes("save_excel_python('Statistical_Box_Data.xlsx'"), 'per-file metrics must export to Excel');
+assert(html.includes('id="box-excel-file"') && html.includes('accept=".xls,.xlsx"'), 'box plot must accept an Excel statistics file');
+assert(html.includes('async function loadBoxExcel(file)'), 'box plot must parse Excel statistics');
+assert(html.includes('id="box-group-size" value="16"') && html.includes('id="box-group-count" value="3"'), 'Excel import must expose sequential group sizing controls');
+assert(html.includes("['Voc','Voc (V)','V_oc']") && html.includes("['Jsc','Jsc (mA/cm²)','J_sc']"), 'Excel import must recognize Voc and Jsc columns');
+assert(html.includes("['FF','FF (%)']") && html.includes("['PCE','PCE (%)']"), 'Excel import must recognize FF and PCE columns');
+assert(html.includes('Math.abs(values.ff)>1?values.ff/100:values.ff'), 'Excel FF percentages must use the existing fractional FF scale');
+assert(html.includes('const total=groupSize*groupCount') && html.includes('used=imported.slice(0,total)'), 'Excel rows must be assigned sequentially by group size and count');
 
 console.log('Statistical box plot UI checks passed');

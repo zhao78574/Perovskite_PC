@@ -1,5 +1,5 @@
 ﻿#define AppName "Perovskite Engine"
-#define AppVersion "1.4.4"
+#define AppVersion "1.4.5"
 #define AppExeName "PerovskiteEngine.exe"
 
 [Setup]

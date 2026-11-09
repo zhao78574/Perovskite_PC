@@ -261,7 +261,20 @@ class BackendAPI:
             recipient, quote(str(subject)), quote(str(body))
         )
         try:
-            webbrowser.open(mailto)
+            if sys.platform == 'win32':
+                subprocess.run(
+                    ['clip'],
+                    input=f'{subject}\n\n{body}',
+                    text=True,
+                    check=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                return {
+                    'status': 'manual',
+                    'message': f'反馈模板已复制，请粘贴到邮件中发送至 {recipient}。',
+                }
+            else:
+                webbrowser.open(mailto)
             return {'status': 'success'}
         except Exception as error:  # noqa: BLE001
             return {'status': 'error', 'message': str(error)}

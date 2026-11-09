@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Regenerate I3d XPS outputs",
+			"type": "shell",
+			"command": "D:\\Python\\python.exe",
+			"args": [
+				"XPS_Output\\plot_I3d.py"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Test XPS parser",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tests/test_xps.js"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

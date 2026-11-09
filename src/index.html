@@ -316,7 +316,7 @@
         :root { --brand-dot:#0F766E; }
         html[data-mode="dark"] { --brand-dot:#2DD4BF; }
         .sidebar { display:flex; flex-direction:column; padding:0; overflow:hidden; }
-        .sidebar-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:1.25rem 1.25rem 4px; }
+.sidebar-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:1.25rem 1.25rem 4px; }
         .brand { color: var(--t-ink); }
         .brand-mark { background:none; box-shadow:none; color:var(--t-ink); }
         .brand-name { font-size:14px; font-weight:650; letter-spacing:-.15px; }
@@ -348,6 +348,20 @@
         .sidebar-options summary::after { content:'⌄'; color:var(--t-muted); font-size:16px; transition:transform .18s; }
         .sidebar-options:not([open]) summary::after { transform:rotate(-90deg); }
         .sidebar-options-body { padding-top:4px; }
+        .sidebar-toggle {
+            position:fixed; left:262px; top:50%; z-index:20;
+            width:28px; height:56px; padding:0;
+            border:1px solid var(--t-line); border-left:0; border-radius:0 12px 12px 0;
+            background:var(--t-sidebar); color:var(--t-sub);
+            font:inherit; font-size:20px; line-height:1; cursor:pointer;
+            box-shadow:2px 4px 12px rgba(15,35,45,.08);
+            transition:left .2s ease, background .2s ease, color .2s ease;
+        }
+        .sidebar-toggle:hover { background:var(--t-surface); color:var(--t-ink); }
+        body.sidebar-collapsed .sidebar { width:0; border-right:0; }
+        body.sidebar-collapsed .sidebar-scroll,
+        body.sidebar-collapsed .sidebar-settings { opacity:0; pointer-events:none; }
+        body.sidebar-collapsed .sidebar-toggle { left:0; }
 </style>
 </head>
 <body>
@@ -362,7 +376,7 @@
                     <circle cx="27.8" cy="27.2" r="2.4" fill="var(--brand-dot,#0F766E)"/>
                 </svg>
             </div>
-            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.4</span></div></div>
+            <div><div class="brand-name">Perovskite Workstation</div><div class="brand-version">Laboratory Edition · v<span id="app-version">1.4.5</span></div></div>
         </div>
         <h3>工作区</h3>
         <div class="radio-group">
@@ -373,6 +387,7 @@
             <label><input type="radio" name="mode" value="6" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 17V9h5v8h5V5h5v12"/></svg></span>MPP 绘图</label>
             <label><input type="radio" name="mode" value="7" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M6 16c3-1 3-9 6-9s3 7 6 8"/><path d="M8 4h8"/></svg></span>UPS 分析</label>
             <label><input type="radio" name="mode" value="8" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M6 17c3-1 4-11 7-11s4 8 7 10"/></svg></span>SCLC 分析</label>
+            <label><input type="radio" name="mode" value="10" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 16c2-8 5-11 8-11s6 4 7 11"/><path d="M5 12c2-4 5-5 8-3s5 3 7 1"/></svg></span>XPS 对比</label>
             <div class="nav-group-title">统计</div>
             <label><input type="radio" name="mode" value="9" onchange="switchMode()"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18M4 4v16"/><path d="M6 8h5v8H6zM7 6h3M7 18h3"/><path d="M14 7c3 1 3 9 0 10M17 9l3 3-3 3"/></svg></span>统计箱线图</label>
             <div class="nav-group-title">数据准备</div>
@@ -455,7 +470,12 @@
         <div id="cfg-mode-9" style="display:none;">
             <span class="control-label">统一器件面积 (cm²)</span>
             <input type="number" id="box-area" value="0.07065" min="0.000001" step="0.00001" onchange="recalculateBoxGroups()">
-            <div class="fit-status">每个 TXT / BIN 文件代表一个器件。TXT 前两列依次为电压（V）和电流（A）；BIN 支持 CHI LSV 格式。</div>
+            <div style="display:flex;gap:10px;margin-top:10px"><label class="control-label" style="flex:1">Excel 每组数量<input type="number" id="box-group-size" value="16" min="1" step="1"></label><label class="control-label" style="flex:1">Excel 分组数量<input type="number" id="box-group-count" value="3" min="1" step="1"></label></div>
+            <div class="fit-status">支持 TXT / BIN J–V 文件，或导入包含 Voc、Jsc、FF、PCE 的 Excel 表；Excel 按行顺序分组。</div>
+        </div>
+        <div id="cfg-mode-10" style="display:none;">
+            <label class="checkbox-wrapper"><input type="checkbox" id="xps-normalize" onchange="renderXPS()"> 按最大强度归一化</label>
+            <div class="fit-status">Excel 会自动寻找 Binding Energy，并优先用 Envelope + Residuals 校验原始 Experimental 列；TXT / CSV 仍读取前两列。</div>
         </div>
         </div>
         </details>
@@ -468,9 +488,10 @@
             <span>设置</span>
         </button>
     </div>
+    <button type="button" class="sidebar-toggle" onclick="document.body.classList.toggle('sidebar-collapsed'); this.textContent = document.body.classList.contains('sidebar-collapsed') ? '›' : '‹'; this.setAttribute('aria-label', document.body.classList.contains('sidebar-collapsed') ? '展开侧栏' : '收起侧栏');" aria-label="收起侧栏">‹</button>
 
     <div class="main">
-        <div class="topbar"><div><div class="section-kicker">Perovskite Analysis</div><div class="header-title" id="page-title">J–V 分析</div><div class="header-sub" id="page-subtitle">J–V 性能计算 · PL / TRPL 曲线观察</div></div><div class="top-actions" id="pce-toolbar"><button class="toolbar-btn" onclick="requestClear(1)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-1').click()">导入曲线</button><button class="toolbar-btn primary" onclick="exportPCE()">导出结果</button></div><div class="top-actions" id="trpl-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(4)">清空</button><button class="toolbar-btn primary" onclick="replaceTRPL()">重新导入</button></div><div class="top-actions" id="eis-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(5)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-5').click()">重新导入</button><button class="toolbar-btn primary" onclick="exportEIS()">导出数据</button></div><div class="top-actions" id="mpp-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(6)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-6').click()">重新导入</button><button class="toolbar-btn primary" onclick="exportMPP()">导出换算数据</button></div><div class="top-actions" id="ups-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(7)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-7').click()">导入文件</button><button class="toolbar-btn primary" onclick="exportUPSExcel()">导出 Excel</button></div><div class="top-actions" id="sclc-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(8)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-8').click()">重新导入</button><button class="toolbar-btn" onclick="exportSCLCPlot()">导出 PNG</button><button class="toolbar-btn primary" onclick="exportSCLC()">导出 Excel</button></div><div class="top-actions" id="box-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(9)">清空</button><button class="toolbar-btn" onclick="addBoxGroup()">添加对比组</button><button class="toolbar-btn" onclick="exportBoxPlot()">导出 PNG</button><button class="toolbar-btn primary" onclick="exportBoxData()">导出 Excel</button></div></div>
+        <div class="topbar"><div><div class="section-kicker">Perovskite Analysis</div><div class="header-title" id="page-title">J–V 分析</div><div class="header-sub" id="page-subtitle">J–V 性能计算 · PL / TRPL 曲线观察</div></div><div class="top-actions" id="pce-toolbar"><button class="toolbar-btn" onclick="requestClear(1)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-1').click()">导入曲线</button><button class="toolbar-btn primary" onclick="exportPCE()">导出结果</button></div><div class="top-actions" id="trpl-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(4)">清空</button><button class="toolbar-btn primary" onclick="replaceTRPL()">重新导入</button></div><div class="top-actions" id="eis-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(5)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-5').click()">重新导入</button><button class="toolbar-btn primary" onclick="exportEIS()">导出数据</button></div><div class="top-actions" id="mpp-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(6)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-6').click()">重新导入</button><button class="toolbar-btn primary" onclick="exportMPP()">导出换算数据</button></div><div class="top-actions" id="ups-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(7)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-7').click()">导入文件</button><button class="toolbar-btn primary" onclick="exportUPSExcel()">导出 Excel</button></div><div class="top-actions" id="sclc-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(8)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-8').click()">重新导入</button><button class="toolbar-btn" onclick="exportSCLCPlot()">导出 PNG</button><button class="toolbar-btn primary" onclick="exportSCLC()">导出 Excel</button></div><div class="top-actions" id="xps-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(10)">清空</button><button class="toolbar-btn" onclick="document.getElementById('file-10').click()">重新导入</button><button class="toolbar-btn" onclick="exportPlot('plot-10','XPS_Comparison','svg',1200,720)">导出 SVG</button><button class="toolbar-btn primary" onclick="exportXPS()">导出 Excel</button></div><div class="top-actions" id="box-toolbar" style="display:none;"><button class="toolbar-btn" onclick="requestClear(9)">清空</button><button class="toolbar-btn" onclick="document.getElementById('box-excel-file').click()">导入 Excel</button><button class="toolbar-btn" onclick="addBoxGroup()">添加对比组</button><button class="toolbar-btn" onclick="exportBoxPlot()">导出 PNG</button><button class="toolbar-btn primary" onclick="exportBoxData()">导出 Excel</button><input type="file" id="box-excel-file" accept=".xls,.xlsx" style="display:none" onchange="loadBoxExcel(this.files[0]);this.value='' "></div></div>
 
         <div style="display:flex;justify-content:flex-end;gap:10px;margin:-12px 0 16px"><button class="toolbar-btn" onclick="importSettings()">导入配置</button><button class="toolbar-btn" onclick="exportSettings()">导出配置</button><button class="toolbar-btn" onclick="openMethodGuide()" aria-label="查看当前模块的方法与公式">方法说明</button></div>
 
@@ -707,11 +728,29 @@
                 <div class="action-row"><button class="btn btn-secondary" style="height:42px" onclick="exportSCLCPlot('svg')">导出 SVG</button></div>
             </div>
         </div>
+        <div id="ui-mode-10" style="display:none;">
+            <div class="upload-row empty-state" id="upload-row-10">
+                <div class="upload-zone" id="drop-10">
+                    <svg class="upload-icon" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 20h18M4 19V4"/><path d="M5 16c2-8 5-11 8-11s6 4 7 11"/><path d="M5 12c2-4 5-5 8-3s5 3 7 1"/></svg>
+                    <div class="upload-text">导入一个或多个 XPS 数据文件</div>
+                    <div class="upload-hint">支持 XLSX / XLS / TXT / CSV，自动识别结合能和强度列</div>
+                    <input type="file" id="file-10" multiple accept=".xlsx,.xls,.txt,.csv,.dat" onchange="processXPS(this.files)">
+                </div>
+            </div>
+            <div id="result-10" style="display:none;">
+                <div class="card plot-card" style="padding:10px;margin-bottom:22px;"><div id="plot-10" style="height:500px;width:100%;"></div></div>
+                <div class="section-title">XPS 样品汇总</div>
+            <div class="fit-status" id="xps-data-status"></div>
+            <div id="xps-mapping-preview" class="card" style="display:none;padding:14px;margin:12px 0 16px;"></div>
+                <div class="table-container"><table id="xps-summary-table"></table></div>
+                <div class="action-row"><button class="btn btn-secondary" style="height:42px" onclick="exportPlot('plot-10','XPS_Comparison','png',1200,720)">导出 PNG</button></div>
+            </div>
+        </div>
         <div id="ui-mode-9" style="display:none;">
             <div class="section-title">实验组</div>
             <div id="box-group-list" class="box-group-list"></div>
             <div class="box-add-row"><button class="btn btn-primary" type="button" onclick="addBoxGroup()">＋ 添加对比组</button></div>
-            <div id="box-empty" class="fit-status">请为第一组填写名称并导入多个 J–V TXT / BIN 文件。</div>
+            <div id="box-empty" class="fit-status">请导入 J–V TXT / BIN 文件，或点击上方“导入 Excel”读取统计表。</div>
             <div id="result-9" style="display:none;">
                 <div class="section-title">Voc · Jsc · FF · PCE 统计</div>
                 <div class="card plot-card" style="padding:12px;margin-top:18px;background:#fff;"><div id="plot-9" style="height:580px;width:100%;"></div></div>
@@ -753,11 +792,11 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
-let currentPCEFiles = null; let pceSeries = []; let currentExtFiles = null; let pceDataCache = []; let pceSort = {key:null,direction:'asc'}; let extAoaCache = []; let currentTRPLFiles = []; let trplResults = []; let trplView = 'all'; let selectedTRPL = 0; let trplRunId = 0; let eisResults = []; let mppResults = []; let upsFiles = []; let upsSamples = []; let upsRunId = 0; let upsDrawTarget = null; let upsPcbmLevels = {lumo:-3.90,homo:-5.63}; let upsPcbmError = ''; let sclcResults = []; let boxGroups = [];
+let currentPCEFiles = null; let pceSeries = []; let currentExtFiles = null; let pceDataCache = []; let pceSort = {key:null,direction:'asc'}; let extAoaCache = []; let currentTRPLFiles = []; let trplResults = []; let trplView = 'all'; let selectedTRPL = 0; let trplRunId = 0; let eisResults = []; let mppResults = []; let upsFiles = []; let upsSamples = []; let upsRunId = 0; let upsDrawTarget = null; let upsPcbmLevels = {lumo:-3.90,homo:-5.63}; let upsPcbmError = ''; let sclcResults = []; let xpsResults = []; let boxGroups = [];
 const SETTINGS_KEY='perovskite-workstation-settings-v1';
 const APP_VERSION=document.getElementById('app-version').textContent;
 let updatePollTimer=null; let updateState={status:'idle'};
-const SETTING_IDS=['pce-area','pce-abs','pce-log','ext-skip','ext-cols','ext-do-abs','ext-abs-col','ext-do-jv','ext-area','ext-do-math','ext-op','ext-val','ext-blank','fit-model','mpp-y-mode','mpp-voltage','mpp-area','mpp-light','mpp-smooth','sclc-area','sclc-polarity','sclc-smooth','box-area','rename-prefix','ups-smooth','ups-smooth-order','ups-smooth-window'];
+const SETTING_IDS=['pce-area','pce-abs','pce-log','ext-skip','ext-cols','ext-do-abs','ext-abs-col','ext-do-jv','ext-area','ext-do-math','ext-op','ext-val','ext-blank','fit-model','mpp-y-mode','mpp-voltage','mpp-area','mpp-light','mpp-smooth','sclc-area','sclc-polarity','sclc-smooth','box-area','rename-prefix','ups-smooth','ups-smooth-order','ups-smooth-window','xps-normalize'];
 const METHOD_GUIDES={
     1:['J–V 分析','Jsc 由 V = 0 两侧数据线性插值得到；Voc 由 I = 0 两侧数据线性插值得到。FF = Pmax / (Voc × Isc)，PCE (%) = Voc × Jsc × FF。器件面积以 cm² 输入。'],
     2:['数据提取','按设置的跳过行数与列编号读取数据。电流密度换算为 J = I × 1000 / 面积；自定义运算只作用于第二个提取列。'],
@@ -767,7 +806,8 @@ const METHOD_GUIDES={
     6:['MPP 绘图','电流密度 J = |I| / 面积，功率密度 = J × 电压，PCE = 功率密度 / 入射光强 × 100。平滑会修复短时掉点并分别处理启动段与稳定段。'],
     7:['UPS 分析','功函数 Φ = 21.22 − Ecutoff；VBM = −(Φ + Eonset)；CBM = VBM + Eg。曲线默认先做 Savitzky-Golay 平滑（2 阶 / 7 点，可在配对区调整），平滑发生在归一化与拟合之前。自动拟合结果可用手动画线覆盖，导出会注明自动或手动。'],
     8:['SCLC 分析','电流密度 J = |I| / 面积；按所选正/负偏压筛选后使用双对数坐标。可选平滑为 4 点后向移动平均，不会覆盖原始数据。'],
-    9:['统计箱线图','四分位数采用线性插值；须线显示样本最小值和最大值，并叠加所有器件原始散点。统计结果沿用 J–V 的 Voc/Jsc 插值算法。']
+    9:['统计箱线图','四分位数采用线性插值；须线显示样本最小值和最大值，并叠加所有器件原始散点。统计结果沿用 J–V 的 Voc/Jsc 插值算法。'],
+    10:['XPS 对比','Excel 优先通过 Experimental = Envelope + Residuals 校验原始实验列，再叠加 Experimental、Envelope 与 Background。结合能轴从高到低显示；可选按各样品最大强度归一化。']
 };
 let toastTimer;
 function openMethodGuide() { const mode=Number(document.querySelector('input[name="mode"]:checked').value),guide=METHOD_GUIDES[mode];document.getElementById('method-title').textContent=guide[0]+' · 方法说明';document.getElementById('method-content').textContent=guide[1];document.getElementById('method-dialog').showModal(); }
@@ -782,12 +822,19 @@ function openFeedback() {
         `系统：${navigator.userAgent}`,
         '', '请在上方补充问题描述；如有需要，请手动附上日志文件。'
     ].join('\\n');
+    if (!window.pywebview?.api?.open_feedback_email) {
+        const message = `当前是浏览器预览模式，无法直接打开邮件客户端。\n\n反馈模板已复制，请粘贴到邮件中发送至 zhao78574@163.com。`;
+        const copied = navigator.clipboard?.writeText(`${subject}\n\n${body}`);
+        Promise.resolve(copied).then(() => alert(message)).catch(() => window.prompt('请复制下面的反馈模板并发送至 zhao78574@163.com：', `${subject}\n\n${body}`));
+        return;
+    }
     window.pywebview.api.open_feedback_email(subject, body).then((result) => {
+        if (result?.status === 'manual') alert(result.message);
         if (result?.status === 'error') alert('无法打开邮件客户端：' + result.message);
     }).catch((error) => alert('无法打开邮件客户端：' + (error.message || error)));
 }
 function openUpdateDialog() { document.getElementById('update-dialog').showModal(); updateAction(); }
-function updateHasUnsavedData() { return Boolean(currentPCEFiles||currentExtFiles||currentTRPLFiles.length||eisResults.length||mppResults.length||upsFiles.length||sclcResults.length||boxGroups.some(group=>group.results?.length)); }
+function updateHasUnsavedData() { return Boolean(currentPCEFiles||currentExtFiles||currentTRPLFiles.length||eisResults.length||mppResults.length||upsFiles.length||sclcResults.length||xpsResults.length||boxGroups.some(group=>group.results?.length)); }
 function updateTaskRunning() { return Boolean(upsSamples.some(sample=>sample.status==='running') || /正在/.test(document.getElementById('fit-progress')?.textContent||'') || /正在/.test(document.getElementById('ups-status')?.textContent||'')); }
 function renderUpdateState() {
     const status=document.getElementById('update-status'), notes=document.getElementById('update-notes'), action=document.getElementById('update-action');
@@ -812,12 +859,12 @@ function applySettings(values) { SETTING_IDS.forEach(id=>{const element=document
 function saveSettings() { localStorage.setItem(SETTINGS_KEY,JSON.stringify(collectSettings())); }
 function restoreSettings() { try { applySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch(error) { localStorage.removeItem(SETTINGS_KEY); } }
 async function exportSettings() { const payload={format:'perovskite-workstation-settings',version:1,software_version:APP_VERSION,exported_at:new Date().toISOString(),values:collectSettings()};const response=await window.pywebview.api.save_settings_python(payload);if(response==='success')showToast('实验室配置已导出。');else if(response?.startsWith('error:'))alert('配置导出失败：'+response.slice(6)); }
-async function importSettings() { try { const response=await window.pywebview.api.load_settings_python();if(response?.status==='cancelled')return;if(response?.status!=='success')throw new Error(response?.message||'配置读取失败');if(response.settings.version!==1||!response.settings.values||typeof response.settings.values!=='object')throw new Error('配置文件版本不受支持');applySettings(response.settings.values);saveSettings();if(pceSeries.length)triggerPCE();if(currentExtFiles)triggerExt();if(mppResults.length)renderMPP();if(sclcResults.length)renderSCLC();if(boxGroups.some(group=>group.results.length))recalculateBoxGroups();showToast('实验室配置已导入。TRPL 已有结果不会自动重新拟合。'); } catch(error) { alert('配置导入失败：'+(error.message||error)); } }
+async function importSettings() { try { const response=await window.pywebview.api.load_settings_python();if(response?.status==='cancelled')return;if(response?.status!=='success')throw new Error(response?.message||'配置读取失败');if(response.settings.version!==1||!response.settings.values||typeof response.settings.values!=='object')throw new Error('配置文件版本不受支持');applySettings(response.settings.values);saveSettings();if(pceSeries.length)triggerPCE();if(currentExtFiles)triggerExt();if(mppResults.length)renderMPP();if(sclcResults.length)renderSCLC();if(xpsResults.length)renderXPS();if(boxGroups.some(group=>group.results.length))recalculateBoxGroups();showToast('实验室配置已导入。TRPL 已有结果不会自动重新拟合。'); } catch(error) { alert('配置导入失败：'+(error.message||error)); } }
 function triggerPCE() { if(pceSeries.length) { recalculateAllPCE(); renderPCE(); } }
 function triggerExt() { if(currentExtFiles) processExtract(currentExtFiles); }
 function switchMode() {
     let mode = document.querySelector('input[name="mode"]:checked').value;
-    const titles = {"1":["光电曲线分析","J–V 性能计算 · PL / TRPL 曲线观察"],"2":["数据提取","整理 TXT / BIN 实验数据"],"3":["文件重命名","批量规范实验文件名称"],"4":["TRPL 指数拟合","ExpDec2 / ExpDec3 拟合 · 积分平均寿命 · 拟合优度"],"5":["EIS 绘图","Nyquist 曲线 · 首尾阻抗差"],"6":["MPP 绘图","多曲线 MPP Tracking · 原始数据查看"],"7":["UPS 分析","批量配对 · 自动/手动拟合 · 动态能级图"],"8":["SCLC 分析","单载流子器件 · 电流密度双对数曲线"],"9":["统计箱线图","彩色箱体 · 中位线 · 原始散点"]};
+    const titles = {"1":["光电曲线分析","J–V 性能计算 · PL / TRPL 曲线观察"],"2":["数据提取","整理 TXT / BIN 实验数据"],"3":["文件重命名","批量规范实验文件名称"],"4":["TRPL 指数拟合","ExpDec2 / ExpDec3 拟合 · 积分平均寿命 · 拟合优度"],"5":["EIS 绘图","Nyquist 曲线 · 首尾阻抗差"],"6":["MPP 绘图","多曲线 MPP Tracking · 原始数据查看"],"7":["UPS 分析","批量配对 · 自动/手动拟合 · 动态能级图"],"8":["SCLC 分析","单载流子器件 · 电流密度双对数曲线"],"9":["统计箱线图","彩色箱体 · 中位线 · 原始散点"],"10":["XPS 对比","多样品叠加 · 结合能谱线比较"]};
     document.getElementById('page-title').textContent = titles[mode][0];
     document.getElementById('page-subtitle').textContent = titles[mode][1];
     document.getElementById('pce-toolbar').style.display = mode === "1" ? 'flex' : 'none';
@@ -826,8 +873,9 @@ function switchMode() {
     document.getElementById('mpp-toolbar').style.display = mode === "6" ? 'flex' : 'none';
     document.getElementById('ups-toolbar').style.display = mode === "7" ? 'flex' : 'none';
     document.getElementById('sclc-toolbar').style.display = mode === "8" ? 'flex' : 'none';
+    document.getElementById('xps-toolbar').style.display = mode === "10" ? 'flex' : 'none';
     document.getElementById('box-toolbar').style.display = mode === "9" ? 'flex' : 'none';
-    for(let i=1; i<=9; i++) {
+    for(let i=1; i<=10; i++) {
         document.getElementById(`cfg-mode-${i}`) && (document.getElementById(`cfg-mode-${i}`).style.display = (i==mode)?'block':'none');
         document.getElementById(`ui-mode-${i}`).style.display = (i==mode)?'block':'none';
     }
@@ -844,19 +892,20 @@ function clearUI(mode) {
     if(mode === 6) mppResults = [];
     if(mode === 7) { upsRunId++; upsFiles = []; upsSamples = []; upsDrawTarget = null; upsPcbmError = ''; upsEnergyMode = 'reference'; document.querySelectorAll('[data-energy-mode]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.energyMode === 'reference')); syncUPSPCBMInputs(); document.getElementById('ups-pairs').innerHTML = ''; document.getElementById('ups-fit-controls').innerHTML = ''; document.getElementById('ups-summary-table').innerHTML = ''; document.getElementById('ups-curves').innerHTML = ''; document.getElementById('ups-analysis').style.display = 'none'; }
     if(mode === 8) sclcResults = [];
+    if(mode === 10) xpsResults = [];
     if(mode === 9) { boxGroups = []; addBoxGroup(); renderBoxPlot(); }
 }
 function requestClear(mode) { if(confirm('确定清空当前模块中尚未导出的数据吗？')) clearUI(mode); }
 function replaceTRPL() { clearUI(4); document.getElementById('file-4').click(); }
 function refitTRPL() { if(currentTRPLFiles.length) processTRPL(currentTRPLFiles, false); }
-['drop-1', 'drop-2', 'drop-4', 'drop-5', 'drop-6', 'drop-7', 'drop-8'].forEach(id => {
+['drop-1', 'drop-2', 'drop-4', 'drop-5', 'drop-6', 'drop-7', 'drop-8', 'drop-10'].forEach(id => {
     let el = document.getElementById(id);
     el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dragover'); });
     el.addEventListener('dragleave', e => { el.classList.remove('dragover'); });
     el.addEventListener('drop', e => {
         e.preventDefault(); el.classList.remove('dragover');
         let fileInput = el.querySelector('input[type="file"]'); fileInput.files = e.dataTransfer.files; 
-        if(id === 'drop-1') processPCE(e.dataTransfer.files); if(id === 'drop-2') processExtract(e.dataTransfer.files); if(id === 'drop-4') processTRPL(e.dataTransfer.files); if(id === 'drop-5') processEIS(e.dataTransfer.files); if(id === 'drop-6') processMPP(e.dataTransfer.files); if(id === 'drop-7') loadUPSFiles(e.dataTransfer.files); if(id === 'drop-8') processSCLC(e.dataTransfer.files);
+        if(id === 'drop-1') processPCE(e.dataTransfer.files); if(id === 'drop-2') processExtract(e.dataTransfer.files); if(id === 'drop-4') processTRPL(e.dataTransfer.files); if(id === 'drop-5') processEIS(e.dataTransfer.files); if(id === 'drop-6') processMPP(e.dataTransfer.files); if(id === 'drop-7') loadUPSFiles(e.dataTransfer.files); if(id === 'drop-8') processSCLC(e.dataTransfer.files); if(id === 'drop-10') processXPS(e.dataTransfer.files);
     });
 });
 function getEISMetrics(zReal) {
@@ -930,6 +979,184 @@ async function processSCLC(files) {
     document.getElementById('result-8').style.display = 'block';
     renderSCLC();
     showBatchErrors('result-8',failed); if(failed.length) showToast(`SCLC：${failed.length} 个文件无法识别，已在结果区列出。`);
+}
+function parseXPSText(text) {
+    return text.split(/\r?\n/).map(line=>line.trim().split(/[\s,;]+/).map(Number)).filter(row=>row.length>=2 && row.slice(0,2).every(Number.isFinite));
+}
+console.assert(parseXPSText('1 2\n3,4').length === 2);
+function xpsCellText(value) { return value == null ? '' : String(value).replace(/[\u2212\u2013]/g,'-').trim(); }
+function xpsNumber(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    const text=xpsCellText(value).replace(/,/g,'');
+    if (!text || !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) return null;
+    const number=Number(text); return Number.isFinite(number) ? number : null;
+}
+function xpsColumnLabel(rows, headerRow, column) {
+    const labels=[];
+    for (let row=Math.max(0,headerRow-2); row<=Math.min(rows.length-1,headerRow+1); row++) {
+        const text=xpsCellText(rows[row]?.[column]);
+        if (text && !labels.includes(text) && xpsNumber(text)===null) labels.push(text);
+    }
+    return labels.join(' / ') || `Column ${column+1}`;
+}
+function xpsRole(label) {
+    const text=label.toLowerCase().replace(/[._-]+/g,' ');
+    if (/background|backgnd|背景/.test(text)) return 'background';
+    if (/envelope|fit\s*sum|sum\s*fit|包络/.test(text)) return 'envelope';
+    if (/residual|difference|残差/.test(text)) return 'residual';
+    if (/component|peak\s*\d|peak\s*[a-z]|fit\s*\d|fitted|分峰|峰/.test(text)) return 'component';
+    if (/binding\s*energy|kinetic\s*energy|结合能|能量|\bbe\b/.test(text)) return 'energy';
+    if (/experimental|raw\s*(intensity|data|spectrum)|intensity|counts?|cps|signal|scan|强度|计数|实验/.test(text)) return 'raw';
+    return 'other';
+}
+function xpsColumnStats(rows, start, column) {
+    const values=rows.slice(start).map(row=>xpsNumber(row?.[column])).filter(value=>value!==null);
+    const unique=new Set(values.map(value=>String(value))).size;
+    return {values,count:values.length,unique,min:values.length?Math.min(...values):null,max:values.length?Math.max(...values):null};
+}
+function xpsSeries(rows, start, energyColumn, valueColumn) {
+    return rows.slice(start).map(row=>[xpsNumber(row?.[energyColumn]),xpsNumber(row?.[valueColumn])]).filter(pair=>pair.every(value=>value!==null));
+}
+function detectXPSColumns(rows) {
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const width=Math.max(...rows.slice(0,80).map(row=>Array.isArray(row)?row.length:0),0), headerCandidates=[];
+    for (let row=0; row<Math.min(80,rows.length); row++) {
+        let semantic=0;
+        for (let column=0; column<width; column++) {
+            const directRole=xpsRole(xpsCellText(rows[row]?.[column]));
+            const combinedRole=xpsRole(xpsColumnLabel(rows,row,column));
+            semantic += ['energy','raw','background','envelope','component'].includes(directRole) ? 2 : ['energy','raw','background','envelope','component'].includes(combinedRole) ? 1 : 0;
+        }
+        if (semantic) headerCandidates.push({row,semantic});
+    }
+    const headers=headerCandidates.sort((a,b)=>b.semantic-a.semantic)[0], attempts=[];
+    const headerRows=headers ? [headers.row] : [-1];
+    for (const headerRow of headerRows) {
+        const start=headerRow+1, columns=Array.from({length:width},(_,column)=>({column,label:headerRow>=0?xpsColumnLabel(rows,headerRow,column):`Column ${column+1}`,role:headerRow>=0?xpsRole(xpsColumnLabel(rows,headerRow,column)):'other',stats:xpsColumnStats(rows,start,column)})).filter(item=>item.stats.count>=2 && (item.stats.unique>=2 || ['background','envelope','component'].includes(item.role)));
+        for (const energy of columns) for (const raw of columns) {
+            if (energy.column===raw.column) continue;
+            const energyLabel=energy.label.toLowerCase(), rawLabel=raw.label.toLowerCase();
+            const energySemantic=energy.role==='energy' ? 100 : /energy|结合能|\bbe\b/.test(energyLabel) ? 45 : 0;
+            const rawSemantic=raw.role==='raw' ? 100 : 0;
+            if (['background','envelope','residual','component'].includes(raw.role)) continue;
+            const monotonic=energy.stats.values.every((value,index,array)=>index===0 || value!==array[index-1]);
+            const score=energySemantic+rawSemantic+Math.min(raw.stats.count,energy.stats.count)/10+(monotonic?8:0)+(raw.role==='other'?-18:0);
+            attempts.push({headerRow,energy:energy.column,raw:raw.column,energyLabel,rawLabel,score,rows:xpsSeries(rows,start,energy.column,raw.column),columns});
+        }
+    }
+    if (!attempts.length) {
+        for (let energy=0; energy<width; energy++) for (let raw=0; raw<width; raw++) if (energy!==raw) {
+            const data=xpsSeries(rows,0,energy,raw); if (data.length>=2) attempts.push({headerRow:-1,energy,raw,energyLabel:`Column ${energy+1}`,rawLabel:`Column ${raw+1}`,score:data.length/10,rows:data,columns:[]});
+        }
+    }
+    attempts.sort((a,b)=>b.score-a.score || b.rows.length-a.rows.length);
+    const best=attempts[0]; if (!best || best.rows.length<2) return null;
+    const second=attempts[1], ambiguous=best.score<45 || (second && best.score-second.score<12);
+    const components=best.columns.filter(item=>item.column!==best.energy && item.column!==best.raw && ['background','envelope','component'].includes(item.role)).map(item=>({column:item.column,label:item.label,role:item.role}));
+    return {headerRow:best.headerRow,x:best.energy,y:best.raw,rows:best.rows,score:best.score,ambiguous,xLabel:best.energyLabel,yLabel:best.rawLabel,columns:best.columns.map(item=>({column:item.column,label:item.label,role:item.role})),components};
+}
+function buildXPSResult(fileName,sheetName,rows,detected,mapping={}) {
+    const x=mapping.x ?? detected.x, raw=mapping.raw ?? detected.y, start=Math.max(0,detected.headerRow+1), columns=detected.columns.length?detected.columns:rows[0]?.map((_,column)=>({column,label:`Column ${column+1}`,role:'other'}))||[];
+    const series=xpsSeries(rows,start,x,raw), componentColumns=columns.filter(item=>item.column!==x && item.column!==raw && ['background','envelope','component'].includes(item.role));
+    const selectedColumns={background:mapping.background ?? componentColumns.find(item=>item.role==='background')?.column,envelope:mapping.envelope ?? componentColumns.find(item=>item.role==='envelope')?.column};
+    const componentData=componentColumns.filter(item=>item.column!==selectedColumns.background && item.column!==selectedColumns.envelope).map(item=>({label:item.label,role:item.role,points:xpsSeries(rows,start,x,item.column)})).filter(item=>item.points.length>=2);
+    return {name:`${fileName} · ${sheetName}`,energy:series.map(pair=>pair[0]),intensity:series.map(pair=>pair[1]),background:selectedColumns.background==null?null:xpsSeries(rows,start,x,selectedColumns.background),envelope:selectedColumns.envelope==null?null:xpsSeries(rows,start,x,selectedColumns.envelope),components:componentData,shift:0,columns:`${columns.find(item=>item.column===x)?.label||`Column ${x+1}`} → ${columns.find(item=>item.column===raw)?.label||`Column ${raw+1}`}`,sourceRows:rows,sheetName,detected,mapping:{x,raw,background:selectedColumns.background,envelope:selectedColumns.envelope},ambiguous:detected.ambiguous};
+}
+function parseXPSWorkbook(buffer, fileName) {
+    const workbook=XLSX.read(buffer,{type:'array',raw:true}), candidates=[];
+    workbook.SheetNames.forEach(sheetName=>{const rows=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:null}),detected=detectXPSColumns(rows);if(detected)candidates.push({sheetName,rows,detected});});
+    candidates.sort((a,b)=>b.detected.score-a.detected.score || b.detected.rows.length-a.detected.rows.length);
+    const selected=candidates[0]; return selected?buildXPSResult(fileName,selected.sheetName,selected.rows,selected.detected):null;
+}
+console.assert(detectXPSColumns([['Binding Energy (E)',null,'I3d','I3d Scan A','Backgnd.'],['eV',null,'Counts / s','Counts / s','Counts / s'],[640,null,1,2,1],[639.9,null,2,3,2]]).y===2);
+function xpsMappingOptions(item,role) {
+    const columns=item.detected.columns.length?item.detected.columns:item.sourceRows[0].map((_,column)=>({column,label:`Column ${column+1}`,role:'other'}));
+    const selected=item.mapping[role]; return `<option value="">None</option>`+columns.map(column=>`<option value="${column.column}" ${column.column===selected?'selected':''}>${escapeHTML(column.label)}</option>`).join('');
+}
+function renderXPSMappingPreview() {
+    const panel=document.getElementById('xps-mapping-preview'); if (!panel) return;
+    const mapped=xpsResults.filter(item=>item.sourceRows);
+    panel.style.display=mapped.length?'block':'none';
+    if (!mapped.length) { panel.innerHTML=''; return; }
+    const previewRows=xpsResults.map((item,index)=>item.sourceRows?`<div style="display:grid;grid-template-columns:1.7fr repeat(4,1fr) auto;gap:8px;align-items:end;margin-top:10px"><div><small>${escapeHTML(item.name)}</small><div class="fit-status">${item.energy.length} 点 · ${escapeHTML(item.columns)}${item.ambiguous?' · 请确认映射':''}</div></div><label class="control-label">结合能<select data-xps-map="x" data-index="${index}">${xpsMappingOptions(item,'x')}</select></label><label class="control-label">原始强度<select data-xps-map="raw" data-index="${index}">${xpsMappingOptions(item,'raw')}</select></label><label class="control-label">背景<select data-xps-map="background" data-index="${index}">${xpsMappingOptions(item,'background')}</select></label><label class="control-label">包络<select data-xps-map="envelope" data-index="${index}">${xpsMappingOptions(item,'envelope')}</select></label><button class="btn btn-secondary" type="button" onclick="applyXPSMapping(${index})">应用</button></div>`:'').join('');
+    panel.innerHTML='<strong>XPS 列检测预览</strong><div class="fit-status">自动识别结果可在疑似歧义或空图时手动覆盖；背景、包络和分峰只按列名语义显示。</div>'+previewRows;
+    return;
+    /*
+    panel.style.display=mapped.length?'block':'none'; panel.innerHTML=mapped.length?'<strong>XPS 列检测预览</strong><div class="fit-status">自动识别结果可在疑似歧义或空图时手动覆盖；背景、包络和分峰只按列名语义显示。</div>'+xpsResults.map((item,index)=>item.sourceRows?`<div style="display:grid;grid-template-columns:1.7fr repeat(4,1fr) auto;gap:8px;align-items:end;margin-top:10px"><div><small>${escapeHTML(item.name)}</small><div class="fit-status">${item.energy.length} 点 · ${escapeHTML(item.columns)}${item.ambiguous?' · 请确认映射':''}</div></div><label class="control-label">结合能<select data-xps-map="x" data-index="${index}">${xpsMappingOptions(item,'x')}</select></label><label class="control-label">原始强度<select data-xps-map="raw" data-index="${index}">${xpsMappingOptions(item,'raw')}</select></label><label class="control-label">背景<select data-xps-map="background" data-index="${index}">${xpsMappingOptions(item,'background')}</select></label><label class="control-label">包络<select data-xps-map="envelope" data-index="${index}">${xpsMappingOptions(item,'envelope')}</select></label><button class="btn btn-secondary" type="button" onclick="applyXPSMapping(${index})">应用</button></div>`:'').join(''):'');
+}
+    */
+}
+function applyXPSMapping(index) {
+    const item=xpsResults[index], mapping={}; document.querySelectorAll(`[data-xps-map][data-index="${index}"]`).forEach(select=>{const value=select.value;mapping[select.dataset.xpsMap]=value===''?undefined:Number(value);});
+    const rebuilt=buildXPSResult(item.name.split(' · ')[0],item.sheetName,item.sourceRows,item.detected,mapping);
+    if (rebuilt.energy.length<2) { alert('当前映射没有至少两行有效的结合能和原始强度数据，请重新选择列。'); return; }
+    xpsResults[index]=rebuilt; renderXPS();
+}
+async function processXPS(files) {
+    if (!files.length) return;
+    xpsResults = [];
+    const failed = [];
+    for (const file of files) {
+        let result = null;
+        if (/\.xlsx?$/i.test(file.name)) {
+            try { result = parseXPSWorkbook(await file.arrayBuffer(), file.name); } catch (error) { failed.push(`${file.name}：${error.message||'Excel 读取失败'}`); result = null; }
+        } else {
+            const rows = parseXPSText(await file.text());
+            if (rows.length >= 2) result = {name:file.name,energy:rows.map(row=>row[0]),intensity:rows.map(row=>row[1]),shift:0,columns:'Column 1 → Column 2'};
+        }
+        if (!result || result.energy.length < 2) { if (!failed.some(message=>message.startsWith(file.name))) failed.push(`${file.name}：未找到至少两行有效的结合能和原始强度数据`); continue; }
+        xpsResults.push(result);
+    }
+    if (!xpsResults.length) { alert('未找到足够的 XPS 数据，请确认前两列为结合能和强度。'); return; }
+    document.getElementById('upload-row-10').style.display = 'none';
+    document.getElementById('result-10').style.display = 'block';
+    renderXPS();
+    renderXPSMappingPreview();
+    showBatchErrors('result-10',failed); if(failed.length) showToast(`XPS：${failed.length} 个文件无法识别，已在结果区列出。`);
+}
+function xpsPeakIndices(energy,intensity,count=2) {
+    const candidates=intensity.map((value,index)=>index>0&&index<intensity.length-1&&value>=intensity[index-1]&&value>intensity[index+1]?index:-1).filter(index=>index>=0).sort((a,b)=>intensity[b]-intensity[a]);
+    const selected=[];
+    for(const index of candidates){if(selected.every(other=>Math.abs(energy[index]-energy[other])>=2))selected.push(index);if(selected.length===count)break;}
+    return selected;
+}
+console.assert(JSON.stringify(xpsPeakIndices([640,630.7,625,619.2,610],[1,7,2,9,1]))===JSON.stringify([3,1]));
+function updateXPSShift(index,value) { xpsResults[index].shift=Number(value)||0;renderXPS(); }
+function renderXPS() {
+    if (!xpsResults.length) return;
+    const normalize = document.getElementById('xps-normalize').checked;
+    const palette=['#d64545','#2563eb','#7c3aed','#d97706','#0f766e'];
+    const traces = xpsResults.flatMap((item,index)=>{
+        const scale = normalize ? Math.max(...item.intensity.map(value=>Math.abs(value))) || 1 : 1, color=palette[index%palette.length], label=xpsResults.length===1?'':`${item.name} · `, shift=Number(item.shift)||0, shiftedEnergy=item.energy.map(value=>value+shift);
+        const pointTrace={x:shiftedEnergy,y:item.intensity.map(value=>value/scale),mode:'markers',name:`${label}Experimental`,marker:{size:xpsResults.length===1?5:4,color:xpsResults.length===1?'#6b7280':color},hovertemplate:`${label}Experimental<br>Shifted binding energy: %{x:.6g} eV<br>Intensity: %{y:.6g}<extra></extra>`};
+        const extra=[];
+        if (item.envelope) extra.push({x:item.envelope.map(pair=>pair[0]+shift),y:item.envelope.map(pair=>pair[1]/scale),mode:'lines',name:`${label}Fit envelope`,line:{width:2.8,color:xpsResults.length===1?'#d64545':color},hovertemplate:`${label}Fit envelope<br>Shifted binding energy: %{x:.6g} eV<br>Intensity: %{y:.6g}<extra></extra>`});
+        if (item.background) extra.push({x:item.background.map(pair=>pair[0]+shift),y:item.background.map(pair=>pair[1]/scale),mode:'lines',name:`${label}Background`,line:{width:2.2,dash:'dash',color:xpsResults.length===1?'#2c8c96':color},hovertemplate:`${label}Background<br>Shifted binding energy: %{x:.6g} eV<br>Intensity: %{y:.6g}<extra></extra>`});
+        (item.components||[]).forEach((component,componentIndex)=>extra.push({x:component.points.map(pair=>pair[0]+shift),y:component.points.map(pair=>pair[1]/scale),mode:'lines',name:`${label}${component.label}`,line:{width:1.8,dash:component.role==='component'?'dot':'dashdot',color:color},hovertemplate:`${label}${component.label}<br>Shifted binding energy: %{x:.6g} eV<br>Intensity: %{y:.6g}<extra></extra>`}));
+        return [pointTrace,...extra];
+    });
+    const annotations=xpsResults.flatMap((item,index)=>{
+        const scale=normalize?Math.max(...item.intensity.map(value=>Math.abs(value)))||1:1;
+        const shift=Number(item.shift)||0;
+        return xpsPeakIndices(item.energy,item.intensity).map((point,peakIndex)=>({x:item.energy[point]+shift,y:item.intensity[point]/scale,text:`${item.name.split(' · ')[0]}: ${(item.energy[point]+shift).toFixed(2)} eV`,showarrow:true,arrowhead:0,ax:peakIndex===0?-52:52,ay:-28,font:{size:11,color:palette[index%palette.length]},arrowcolor:palette[index%palette.length],bgcolor:'rgba(255,255,255,0.8)'}));
+    });
+    Plotly.react('plot-10', traces, {
+        title:{text:`XPS 对比${normalize?' · 归一化':''}`,x:.5,font:{size:18}},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',color:'#17212b',size:13},
+        xaxis:{title:'Binding energy (eV)',autorange:'reversed',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb',zeroline:false},yaxis:{title:normalize?'Normalized intensity':'Intensity (a.u.)',showline:true,mirror:true,linecolor:'#17212b',gridcolor:'#e5e7eb',zeroline:false},
+        legend:{orientation:'h',x:0,y:1.12},margin:{l:82,r:32,t:82,b:70},hovermode:'closest',annotations
+    }, {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+    document.getElementById('xps-data-status').textContent = `${xpsResults.length} 个样品；${normalize?'已按各样品最大强度归一化；':'保留原始强度；'}绘图使用全部数据点。${xpsResults.map(item=>`${item.name}：${item.columns}${item.components?.length?'；组件 '+item.components.map(component=>component.label).join('、'):''}`).join('；')}`;
+    renderXPSMappingPreview();
+    document.getElementById('xps-summary-table').innerHTML = '<tr><th>样品</th><th>偏移 (eV)</th><th>数据点</th><th>偏移后范围 (eV)</th><th>最大强度</th></tr>' + xpsResults.map((item,index)=>{const shift=Number(item.shift)||0;return `<tr><td>${escapeHTML(item.name)}</td><td><input type="number" step="0.01" value="${shift}" onchange="updateXPSShift(${index},this.value)" style="width:88px"></td><td>${item.energy.length}</td><td>${Number((Math.min(...item.energy)+shift).toFixed(4))} – ${Number((Math.max(...item.energy)+shift).toFixed(4))}</td><td>${Math.max(...item.intensity)}</td></tr>`}).join('');
+}
+async function exportXPS() {
+    if (!xpsResults.length) return;
+    const workbook=XLSX.utils.book_new(),used=new Set(['summary']);
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['file','shift_eV','points','min_shifted_binding_energy_eV','max_shifted_binding_energy_eV','max_intensity'],...xpsResults.map(item=>{const shift=Number(item.shift)||0;return [item.name,shift,item.energy.length,Math.min(...item.energy)+shift,Math.max(...item.energy)+shift,Math.max(...item.intensity)]})]),'Summary');
+    xpsResults.forEach(item=>{const shift=Number(item.shift)||0,componentLabels=(item.components||[]).map(component=>component.label),header=['Binding_energy_shifted_eV','Binding_energy_raw_eV','Experimental','Fit_envelope','Background',...componentLabels.map(label=>`Component_${label}`)]; XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([header,...item.energy.map((energy,index)=>[energy+shift,energy,item.intensity[index],item.envelope?.[index]?.[1]??'',item.background?.[index]?.[1]??'',...(item.components||[]).map(component=>component.points.find(pair=>pair[0]===energy)?.[1]??'')])]),safeSheetName(item.name,used))});
+    appendMethodSheet(workbook,'XPS',{normalization:document.getElementById('xps-normalize').checked?'max intensity':'none',formula:'multi-sample overlay; binding-energy axis reversed'},xpsResults.map(item=>item.name));
+    const response=await window.pywebview.api.save_excel_python('XPS_Comparison.xlsx',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+    if(response==='success') showToast('XPS 对比数据已导出。'); else if(response?.startsWith('error:')) alert('导出失败：'+response.slice(6));
 }
 function getSCLCSettings() {
     const area = Number(document.getElementById('sclc-area').value);
@@ -1186,11 +1413,11 @@ function renderPCE() {
 }
 function addBoxGroup() {
     let number=1; while(boxGroups.some(group=>group.name===`组 ${number}`)) number++;
-    boxGroups.push({name:`组 ${number}`,files:[],curves:[],results:[]});
+    boxGroups.push({name:`组 ${number}`,files:[],curves:[],excelResults:[],results:[]});
     renderBoxGroups();
 }
 function removeBoxGroup(index) {
-    if(boxGroups.length === 1) boxGroups[0] = {name:'组 1',files:[],curves:[],results:[]};
+    if(boxGroups.length === 1) boxGroups[0] = {name:'组 1',files:[],curves:[],excelResults:[],results:[]};
     else boxGroups.splice(index,1);
     renderBoxGroups(); renderBoxPlot();
 }
@@ -1232,10 +1459,54 @@ async function loadBoxGroupFiles(index,files) {
     renderBoxGroups(); renderBoxPlot();
     if(skipped||duplicates) showToast(`导入完成：新增 ${added} 个，跳过无效文件 ${skipped} 个，重复文件 ${duplicates} 个。`);
 }
+function boxHeaderKey(value) {
+    return String(value??'').toLowerCase().replace(/[\s_()（）%./\\-]/g,'');
+}
+function boxColumn(headers, names) {
+    const wanted=names.map(boxHeaderKey);
+    return headers.findIndex(header=>wanted.includes(boxHeaderKey(header)));
+}
+async function loadBoxExcel(file) {
+    if(!file) return;
+    try {
+        const workbook=XLSX.read(await file.arrayBuffer(),{type:'array'});
+        let rows=null,headers=null;
+        for(const sheetName of workbook.SheetNames) {
+            const candidate=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:null});
+            const candidateHeaders=candidate.find(row=>Array.isArray(row)&&row.some(value=>boxColumn([value],['Voc','Jsc','FF','PCE'])>=0));
+            if(!candidateHeaders) continue;
+            const headerIndex=candidate.indexOf(candidateHeaders),candidateRows=candidate.slice(headerIndex+1);
+            const indexes={voc:boxColumn(candidateHeaders,['Voc','Voc (V)','V_oc']),jsc:boxColumn(candidateHeaders,['Jsc','Jsc (mA/cm²)','J_sc']),ff:boxColumn(candidateHeaders,['FF','FF (%)']),pce:boxColumn(candidateHeaders,['PCE','PCE (%)'])};
+            if(Object.values(indexes).some(index=>index<0)) continue;
+            rows=candidateRows; headers=candidateHeaders; break;
+        }
+        if(!rows||!headers) { alert('Excel 中未找到包含 Voc、Jsc、FF、PCE 的数据表。'); return; }
+        const indexes={voc:boxColumn(headers,['Voc','Voc (V)','V_oc']),jsc:boxColumn(headers,['Jsc','Jsc (mA/cm²)','J_sc']),ff:boxColumn(headers,['FF','FF (%)']),pce:boxColumn(headers,['PCE','PCE (%)'])},nameIndex=boxColumn(headers,['原始文件名','文件名','Name','File']);
+        const area=Number(document.getElementById('box-area').value),groupSize=Math.trunc(Number(document.getElementById('box-group-size').value)),groupCount=Math.trunc(Number(document.getElementById('box-group-count').value));
+        if(!(area>0)||!(groupSize>0)||!(groupCount>0)) { alert('面积、每组数量和分组数量必须大于 0。'); return; }
+        const imported=[],skipped=[];
+        rows.forEach((row,rowIndex)=>{
+            if(!Array.isArray(row)) return;
+            const values={voc:Number(row[indexes.voc]),jsc:Number(row[indexes.jsc]),ff:Number(row[indexes.ff]),pce:Number(row[indexes.pce])};
+            if(!Object.values(values).every(Number.isFinite)) { skipped.push(rowIndex+1); return; }
+            const result={'文件名':String(nameIndex>=0&&row[nameIndex]!=null&&row[nameIndex]!==''?row[nameIndex]:`${file.name} #${rowIndex+1}`),'面积 (cm²)':area,'Voc (V)':values.voc.toFixed(4),'Jsc (mA/cm²)':values.jsc.toFixed(4),'FF':(Math.abs(values.ff)>1?values.ff/100:values.ff).toFixed(4),'PCE (%)':values.pce.toFixed(4)};
+            imported.push(result);
+        });
+        if(!imported.length) { alert('Excel 中没有可用的 VOC、JSC、FF、PCE 数值行。'); return; }
+        const total=groupSize*groupCount,used=imported.slice(0,total),overflow=Math.max(0,imported.length-total);
+        boxGroups=[];
+        for(let index=0;index<groupCount;index++) {
+            const results=used.slice(index*groupSize,(index+1)*groupSize),group={name:`组 ${index+1}`,files:[file],curves:[],excelResults:results,results};
+            boxGroups.push(group);
+        }
+        renderBoxGroups(); renderBoxPlot();
+        showToast(`Excel 导入完成：${used.length} 个有效数据，按每组 ${groupSize} 条分为 ${groupCount} 组${overflow?`，超出 ${overflow} 条未使用`:''}${skipped.length?`，跳过 ${skipped.length} 行`:''}。`);
+    } catch(error) { alert('Excel 读取失败：'+(error.message||error)); }
+}
 function recalculateBoxGroups() {
     const input=document.getElementById('box-area'),area=Number(input.value);
     if(!(area>0)) { alert('面积必须大于 0。'); input.value='0.07065'; return; }
-    boxGroups.forEach(group=>group.results=group.curves.map(curve=>getPceFromLists(curve.v,curve.i,curve.name,false,area)).filter(Boolean));
+    boxGroups.forEach(group=>{group.results=[...group.curves.map(curve=>getPceFromLists(curve.v,curve.i,curve.name,false,area)).filter(Boolean),...(group.excelResults||[]).map(result=>({...result,'面积 (cm²)':area}))]});
     renderBoxGroups(); renderBoxPlot();
 }
 function boxPercentile(values,percent) {
